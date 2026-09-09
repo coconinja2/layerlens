@@ -1,0 +1,36 @@
+[project]
+name = "layerlens"
+version = "0.1.0"
+description = "Visual, layer-by-layer observability for autoregressive LLM inference"
+authors = [
+    { name = "coconinja2" },
+]
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+    "torch>=2.6",
+    "transformers>=4.49,<6",
+]
+
+[project.scripts]
+llm-layer-profile = "layer_profiler.cli:main"
+llm-layer-profile-vllm = "layer_profiler.vllm_cli:main"
+
+[tool.poetry]
+packages = [{ include = "layer_profiler", from = "src" }]
+
+[tool.poetry.group.dashboard.dependencies]
+pandas = ">=2.2"
+plotly = ">=5.22"
+streamlit = ">=1.35"
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8"
+
+[build-system]
+requires = ["poetry-core>=2.0,<3.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

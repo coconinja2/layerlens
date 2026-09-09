@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="LayerLens visualizes when every transformer layer runs during LLM prefill and token decode.">
+  <meta name="theme-color" content="#070b16">
+  <title>LayerLens — Every layer. Every token. Every millisecond.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg: #070b16;
+      --panel: rgba(16, 23, 42, .82);
+      --panel-2: rgba(11, 17, 32, .9);
+      --text: #f1f5ff;
+      --muted: #8d9ab4;
+      --border: rgba(159, 177, 215, .14);
+      --cyan: #49d7ff;
+      --violet: #9b87ff;
+      --amber: #ffbd5b;
+      --green: #4ee3a0;
+      --danger: #ff6c8b;
+      --font: "Manrope", sans-serif;
+      --mono: "DM Mono", monospace;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 82% -8%, rgba(90, 72, 220, .25), transparent 31rem),
+        radial-gradient(circle at 5% 20%, rgba(19, 134, 173, .16), transparent 34rem),
+        var(--bg);
+      font-family: var(--font);
+      min-height: 100vh;
+    }
+
+    .noise {
+      position: fixed;
+      inset: 0;
+      opacity: .032;
+      pointer-events: none;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      z-index: -1;
+    }
+
+    nav {
+      max-width: 1440px;
+      margin: auto;
+      padding: 24px 38px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .brand { display: flex; align-items: center; gap: 12px; font-weight: 800; letter-spacing: -.03em; }
+    .brand-mark {
+      width: 32px; height: 32px; border-radius: 9px;
+      display: grid; place-items: center;
+      background: linear-gradient(135deg, var(--cyan), var(--violet));
+      color: #060914; font-family: var(--mono); font-size: 13px;
+      box-shadow: 0 0 28px rgba(73, 215, 255, .2);
+    }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 13px; font-weight: 600; }
+    .nav-links a:hover { color: var(--text); }
+    .github-link { border: 1px solid var(--border); border-radius: 9px; padding: 9px 13px; }
+
+    main { max-width: 1440px; margin: auto; padding: 34px 38px 80px; }
+    .hero { display: grid; grid-template-columns: 1.45fr .55fr; gap: 70px; align-items: end; padding: 42px 0 54px; }
+    .eyebrow { color: var(--cyan); font: 500 11px/1 var(--mono); letter-spacing: .16em; text-transform: uppercase; margin-bottom: 18px; }
+    h1 { margin: 0; max-width: 800px; font-size: clamp(42px, 5.2vw, 74px); line-height: .99; letter-spacing: -.065em; }
+    .gradient { color: transparent; background: linear-gradient(90deg, var(--cyan), #a9b5ff 52%, var(--violet)); background-clip: text; -webkit-background-clip: text; }
+    .hero-copy { margin: 23px 0 0; max-width: 690px; color: var(--muted); font-size: 17px; line-height: 1.7; }
+    .hero-side { border-left: 1px solid var(--border); padding-left: 28px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    .hero-side strong { display: block; color: var(--text); font: 500 13px/1.4 var(--mono); margin-bottom: 6px; }
+
+    .toolbar {
+      display: flex; align-items: center; justify-content: space-between; gap: 24px;
+      padding: 16px 18px; border: 1px solid var(--border); border-radius: 14px 14px 0 0;
+      background: rgba(12, 18, 34, .92); backdrop-filter: blur(16px);
+    }
+    .run-picker { display: flex; align-items: center; gap: 12px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 12px var(--green); }
+    label { color: var(--muted); font: 500 11px var(--mono); text-transform: uppercase; letter-spacing: .09em; }
+    select {
+      color: var(--text); background: #131b31; border: 1px solid var(--border); border-radius: 8px;
+      padding: 9px 34px 9px 11px; font: 500 12px var(--mono);
+    }
+    .run-meta { color: var(--muted); font: 400 11px var(--mono); text-align: right; }
+
+    .dashboard { border: 1px solid var(--border); border-top: 0; border-radius: 0 0 18px 18px; overflow: hidden; background: rgba(8, 13, 26, .74); }
+    .metrics { display: grid; grid-template-columns: repeat(5, 1fr); border-bottom: 1px solid var(--border); }
+    .metric { min-height: 104px; padding: 21px 22px; border-right: 1px solid var(--border); }
+    .metric:last-child { border-right: 0; }
+    .metric-label { color: var(--muted); font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .12em; }
+    .metric-value { margin-top: 12px; font-size: 25px; font-weight: 700; letter-spacing: -.04em; }
+    .metric-note { color: var(--muted); font: 400 10px var(--mono); margin-top: 5px; }
+
+    .chart-grid { display: grid; grid-template-columns: 1.28fr .72fr; }
+    .chart-panel { min-width: 0; padding: 24px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+    .chart-panel:nth-child(2n) { border-right: 0; }
+    .chart-panel.full { grid-column: 1 / -1; border-right: 0; }
+    .panel-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 13px; }
+    h2 { margin: 0; font-size: 15px; letter-spacing: -.02em; }
+    .panel-kicker { color: var(--muted); font: 400 10px var(--mono); margin-top: 5px; }
+    .legend { display: flex; gap: 15px; color: var(--muted); font: 400 10px var(--mono); }
+    .legend span { display: flex; align-items: center; gap: 5px; }
+    .legend i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+    .plot { width: 100%; height: 470px; }
+    #step-chart { height: 470px; }
+    #timeline { height: 650px; }
+    #benchmark { height: 330px; }
+
+    .explain {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px;
+      margin-top: 72px; background: var(--border); border: 1px solid var(--border); border-radius: 15px; overflow: hidden;
+    }
+    .explain article { background: var(--panel-2); padding: 28px; }
+    .explain .number { color: var(--cyan); font: 500 11px var(--mono); }
+    .explain h3 { font-size: 16px; margin: 16px 0 9px; }
+    .explain p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+    footer { padding: 28px 0 0; color: var(--muted); font: 400 10px var(--mono); display: flex; justify-content: space-between; }
+
+    .loading { min-height: 560px; display: grid; place-items: center; color: var(--muted); font: 12px var(--mono); }
+
+    @media (max-width: 980px) {
+      .hero { grid-template-columns: 1fr; gap: 30px; }
+      .hero-side { max-width: 600px; }
+      .metrics { grid-template-columns: repeat(2, 1fr); }
+      .metric { border-bottom: 1px solid var(--border); }
+      .chart-grid { grid-template-columns: 1fr; }
+      .chart-panel, .chart-panel:nth-child(2n) { border-right: 0; }
+      .explain { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 620px) {
+      nav, main { padding-left: 18px; padding-right: 18px; }
+      .nav-links a:not(.github-link) { display: none; }
+      .hero { padding-top: 20px; }
+      .hero-side { display: none; }
+      .toolbar { align-items: flex-start; flex-direction: column; }
+      .run-meta { text-align: left; }
+      .metrics { grid-template-columns: 1fr 1fr; }
+      .metric { min-height: 95px; }
+      .chart-panel { padding: 18px 10px; }
+      .panel-head { padding: 0 8px; align-items: flex-start; flex-direction: column; }
+      .plot, #step-chart { height: 400px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="noise"></div>
+  <nav>
+    <div class="brand"><span class="brand-mark">LL</span> LayerLens</div>
+    <div class="nav-links">
+      <a href="#explorer">Explorer</a>
+      <a href="#method">Method</a>
+      <a class="github-link" href="https://github.com/coconinja2/layerlens">View source ↗</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="hero">
+      <div>
+        <div class="eyebrow">Open-source LLM observability</div>
+        <h1>Every layer. Every token. <span class="gradient">Every millisecond.</span></h1>
+        <p class="hero-copy">LayerLens reveals exactly when each transformer layer executes—from prompt prefill through every KV-cache decode step—so inference bottlenecks become visible, measurable, and comparable.</p>
+      </div>
+      <div class="hero-side">
+        <strong>LIVE CAPTURE · QWEN3.5 0.8B</strong>
+        A real vLLM CPU run instrumented at the decoder-layer boundary. Hover any cell or timeline bar to inspect its exact timestamp and duration.
+      </div>
+    </section>
+
+    <section id="explorer">
+      <div class="toolbar">
+        <div class="run-picker"><span class="status-dot"></span><label for="run-select">Benchmark run</label><select id="run-select" aria-label="Benchmark run"></select></div>
+        <div class="run-meta" id="run-meta">Loading trace…</div>
+      </div>
+      <div class="dashboard" id="dashboard"><div class="loading">Loading instrumented layer events…</div></div>
+    </section>
+
+    <section class="explain" id="method">
+      <article><span class="number">01 / CAPTURE</span><h3>Instrument model boundaries</h3><p>Hooks synchronize the accelerator at layer entry and exit, recording start time, duration, shapes, phase, and device without changing model code.</p></article>
+      <article><span class="number">02 / ATTRIBUTE</span><h3>Separate prefill from decode</h3><p>Step zero represents prompt prefill and first-token latency. Every following step isolates one KV-cache decode pass.</p></article>
+      <article><span class="number">03 / COMPARE</span><h3>Benchmark the same way</h3><p>Portable JSON traces make model, runtime, hardware, and configuration comparisons reproducible and easy to share.</p></article>
+    </section>
+    <footer><span>LAYERLENS · TRACE SCHEMA 1.0</span><span>BUILT FOR REPRODUCIBLE INFERENCE ANALYSIS</span></footer>
+  </main>
+
+  <script>
+    const COLORS = { cyan: '#49d7ff', violet: '#9b87ff', amber: '#ffbd5b', green: '#4ee3a0', muted: '#8d9ab4', text: '#f1f5ff', grid: 'rgba(159,177,215,.10)', panel: '#0b1120' };
+    const plotConfig = {displayModeBar: false, responsive: true, scrollZoom: false};
+    let runs = [];
+
+    const fmt = value => value >= 1000 ? `${(value / 1000).toFixed(2)} s` : `${value.toFixed(1)} ms`;
+    const layerLabel = value => `Layer ${value}`;
+    const stepLabel = step => step.step === 0 ? 'P0 · Prefill' : `D${step.step} · Decode`;
+    const baseLayout = {
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: {family: 'DM Mono, monospace', color: COLORS.muted, size: 10},
+      margin: {l: 70, r: 14, t: 12, b: 52},
+      hoverlabel: {bgcolor: '#151d33', bordercolor: 'rgba(159,177,215,.2)', font: {family: 'DM Mono, monospace', color: COLORS.text, size: 11}},
+      xaxis: {gridcolor: COLORS.grid, zeroline: false, tickfont: {color: COLORS.muted}},
+      yaxis: {gridcolor: COLORS.grid, zeroline: false, tickfont: {color: COLORS.muted}}
+    };
+
+    function shell(run) {
+      return `
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">First token · TTFT</div><div class="metric-value">${fmt(run.ttftMs)}</div><div class="metric-note">PROMPT PREFILL</div></div>
+          <div class="metric"><div class="metric-label">Mean decode</div><div class="metric-value">${fmt(run.meanDecodeMs)}</div><div class="metric-note">PER LATER TOKEN</div></div>
+          <div class="metric"><div class="metric-label">Decode rate</div><div class="metric-value">${run.decodeTokensPerSecond.toFixed(2)}</div><div class="metric-note">TOKENS / SECOND</div></div>
+          <div class="metric"><div class="metric-label">Layer calls</div><div class="metric-value">${run.eventCount}</div><div class="metric-note">${run.layerCount} DECODER LAYERS</div></div>
+          <div class="metric"><div class="metric-label">Request wall time</div><div class="metric-value">${fmt(run.requestMs)}</div><div class="metric-note">CLIENT OBSERVED</div></div>
+        </div>
+        <div class="chart-grid">
+          <section class="chart-panel"><div class="panel-head"><div><h2>Layer × token heatmap</h2><div class="panel-kicker">Color = execution duration · hover for exact values</div></div><div class="legend"><span><i style="background:${COLORS.cyan}"></i>Prefill</span><span><i style="background:${COLORS.violet}"></i>Decode</span></div></div><div id="heatmap" class="plot"></div></section>
+          <section class="chart-panel"><div class="panel-head"><div><h2>Token-step latency</h2><div class="panel-kicker">Prefill vs. sequential decode passes</div></div></div><div id="step-chart" class="plot"></div></section>
+          <section class="chart-panel full"><div class="panel-head"><div><h2>Execution timeline — what layer was running when</h2><div class="panel-kicker">Absolute time since capture start · each bar is one decoder-layer call</div></div></div><div id="timeline" class="plot"></div></section>
+          <section class="chart-panel full"><div class="panel-head"><div><h2>Benchmark comparison</h2><div class="panel-kicker">Same model, prompt, runtime, and hardware · different generation windows</div></div></div><div id="benchmark" class="plot"></div></section>
+        </div>`;
+    }
+
+    function renderHeatmap(run) {
+      const layers = [...new Set(run.events.map(e => e.layer))].sort((a,b) => b-a);
+      const steps = run.steps.map(s => s.step);
+      const byCell = new Map(run.events.map(e => [`${e.layer}:${e.step}`, e.durationMs]));
+      const z = layers.map(layer => steps.map(step => byCell.get(`${layer}:${step}`) || 0));
+      Plotly.newPlot('heatmap', [{type:'heatmap', x: run.steps.map(stepLabel), y: layers.map(layerLabel), z,
+        colorscale: [[0,'#0d1730'],[.18,'#143c5a'],[.42,'#176e82'],[.68,'#3cb6b2'],[1,'#ffe08a']],
+        colorbar:{title:{text:'ms',side:'top'}, thickness:8, len:.72, outlinewidth:0, tickfont:{size:9}},
+        hovertemplate:'%{y}<br>%{x}<br><b>%{z:.3f} ms</b><extra></extra>'}],
+        {...baseLayout, margin:{l:72,r:45,t:12,b:52}, xaxis:{...baseLayout.xaxis, title:'Generation step'}, yaxis:{...baseLayout.yaxis, title:'Decoder layer', dtick:2}}, plotConfig);
+    }
+
+    function renderSteps(run) {
+      const colors = run.steps.map(s => s.phase === 'prefill' ? COLORS.cyan : COLORS.violet);
+      Plotly.newPlot('step-chart', [{type:'bar', x:run.steps.map(stepLabel), y:run.steps.map(s=>s.durationMs), marker:{color:colors, line:{color:'rgba(255,255,255,.14)',width:1}},
+        text:run.steps.map(s=>fmt(s.durationMs)), textposition:'outside', cliponaxis:false,
+        hovertemplate:'%{x}<br><b>%{y:.3f} ms</b><extra></extra>'}],
+        {...baseLayout, margin:{l:58,r:15,t:28,b:52}, bargap:.28, xaxis:{...baseLayout.xaxis, title:'Generation step'}, yaxis:{...baseLayout.yaxis, title:'Latency (ms)', rangemode:'tozero'}}, plotConfig);
+    }
+
+    function renderTimeline(run) {
+      const prefill = run.events.filter(e => e.phase === 'prefill');
+      const decode = run.events.filter(e => e.phase === 'decode');
+      const trace = (rows, name, color) => ({type:'bar', orientation:'h', name, y:rows.map(e=>layerLabel(e.layer)), x:rows.map(e=>e.durationMs), base:rows.map(e=>e.startMs), marker:{color, line:{color:'rgba(255,255,255,.18)',width:.5}}, width:.64,
+        customdata:rows.map(e=>[e.step,e.startMs,e.startMs+e.durationMs,e.durationMs]),
+        hovertemplate:'%{y} · step %{customdata[0]}<br>start <b>%{customdata[1]:.3f} ms</b><br>end %{customdata[2]:.3f} ms<br>duration %{customdata[3]:.3f} ms<extra></extra>'});
+      Plotly.newPlot('timeline', [trace(prefill,'Prefill',COLORS.cyan),trace(decode,'Decode',COLORS.violet)],
+        {...baseLayout, barmode:'overlay', showlegend:false, margin:{l:72,r:14,t:12,b:58}, xaxis:{...baseLayout.xaxis,title:'Time since capture start (ms)'}, yaxis:{...baseLayout.yaxis,title:'Decoder layer', categoryorder:'array', categoryarray:[...Array(run.layerCount).keys()].reverse().map(layerLabel)}}, plotConfig);
+    }
+
+    function renderBenchmark() {
+      const labels = runs.map(r=>r.label);
+      Plotly.newPlot('benchmark', [
+        {type:'bar',name:'TTFT',x:labels,y:runs.map(r=>r.ttftMs),marker:{color:COLORS.cyan},hovertemplate:'%{x}<br>TTFT <b>%{y:.2f} ms</b><extra></extra>'},
+        {type:'bar',name:'Mean decode',x:labels,y:runs.map(r=>r.meanDecodeMs),marker:{color:COLORS.violet},hovertemplate:'%{x}<br>Mean decode <b>%{y:.2f} ms</b><extra></extra>'}
+      ], {...baseLayout,barmode:'group',margin:{l:64,r:15,t:28,b:50},legend:{orientation:'h',x:0,y:1.16,font:{color:COLORS.muted}},xaxis:{...baseLayout.xaxis,title:'Captured generation window'},yaxis:{...baseLayout.yaxis,title:'Latency (ms)',rangemode:'tozero'}},plotConfig);
+    }
+
+    function renderRun(index) {
+      const run = runs[index];
+      document.getElementById('dashboard').innerHTML = shell(run);
+      document.getElementById('run-meta').textContent = `${run.model} · ${run.device.toUpperCase()} · ${run.promptTokens} prompt tokens · ${run.tokenCount} generated`;
+      renderHeatmap(run); renderSteps(run); renderTimeline(run); renderBenchmark();
+    }
+
+    fetch('./runs.json').then(response => {
+      if (!response.ok) throw new Error('Trace data unavailable');
+      return response.json();
+    }).then(data => {
+      runs = data.runs;
+      const select = document.getElementById('run-select');
+      runs.forEach((run,index) => select.add(new Option(run.label,index)));
+      select.value = runs.length - 1;
+      select.addEventListener('change', event => renderRun(Number(event.target.value)));
+      renderRun(runs.length - 1);
+    }).catch(error => {
+      document.getElementById('dashboard').innerHTML = `<div class="loading">${error.message}. Serve this directory over HTTP.</div>`;
+    });
+  </script>
+</body>
+</html>

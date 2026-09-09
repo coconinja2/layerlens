@@ -64,9 +64,6 @@ def compact_trace(path: Path) -> dict[str, Any]:
         "label": f"{token_count}-token run",
         "model": metadata.get("model", metadata.get("model_class", "Unknown model")),
         "device": normalized_events[0].get("module", "unknown") and events[0].get("device", "unknown") if events else "unknown",
-        "createdAt": metadata.get("created_at"),
-        "prompt": metadata.get("prompt", ""),
-        "generatedText": metadata.get("generated_text", ""),
         "promptTokens": metadata.get("prompt_tokens"),
         "tokenCount": token_count,
         "layerCount": len({event["layer"] for event in normalized_events}),
@@ -77,6 +74,7 @@ def compact_trace(path: Path) -> dict[str, Any]:
         "decodeTokensPerSecond": round(1000 / mean_decode, 2) if mean_decode else 0,
         "totalLayerMs": round(total_layer_ms, 3),
         "timingScope": metadata.get("step_timing_scope", "model_forward"),
+        "engineMetrics": payload.get("metrics", {}),
         "steps": normalized_steps,
         "events": normalized_events,
     }

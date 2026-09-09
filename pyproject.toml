@@ -1,6 +1,6 @@
 [project]
 name = "layerlens"
-version = "0.1.0"
+version = "0.2.0"
 description = "Visual, layer-by-layer observability for autoregressive LLM inference"
 authors = [
     { name = "coconinja2" },
@@ -13,6 +13,8 @@ dependencies = [
 ]
 
 [project.scripts]
+layerlens = "layer_profiler.cli:main"
+layerlens-vllm = "layer_profiler.vllm_cli:main"
 llm-layer-profile = "layer_profiler.cli:main"
 llm-layer-profile-vllm = "layer_profiler.vllm_cli:main"
 

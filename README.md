@@ -29,7 +29,11 @@ not need to run continuously or in real time.
 - **Layer × token heatmap:** which decoder layers dominate prefill and decode.
 - **Execution timeline:** the exact start, end, and duration of every layer call.
 - **Token-step latency:** time-to-first-token separated from KV-cache decode cost.
+- **vLLM engine telemetry:** KV-cache pressure, prefix-cache effectiveness,
+  request concurrency, queueing, preemptions, TTFT, and prefill/decode timing.
 - **Benchmark comparison:** comparable traces across models, runtimes, hardware, and generation windows.
+
+![LayerLens vLLM KV-cache and scheduler telemetry](docs/layerlens-kv-metrics.png)
 
 The included showcase contains two real Qwen3.5 0.8B runs captured from an
 instrumented vLLM CPU server. The browser dashboard is static and deploys on
@@ -110,6 +114,51 @@ poetry run llm-layer-profile-vllm \
   --output traces/qwen-vllm.json
 ```
 
+The capture polls vLLM's Prometheus-compatible `/metrics` endpoint during the
+request and records request-scoped counter deltas plus a KV-cache/concurrency
+timeline. Endpoint URLs, raw Prometheus labels, prompts, generated text,
+hostnames, usernames, and filesystem paths are not stored. Use
+`--include-content` only when the text is intentionally safe to retain.
+
+### Metrics-only mode: no injection required
+
+Every standard vLLM server can produce an engine/KV trace without mounting the
+optional layer hook:
+
+```bash
+poetry run layerlens-vllm \
+  --base-url http://localhost:8000 \
+  --model your-org/your-model \
+  --prompt "Benchmark prompt" \
+  --max-tokens 32 \
+  --metrics-only \
+  --output traces/engine-metrics.json
+```
+
+This mode works across model architectures because it consumes vLLM's public
+OpenAI-compatible completion and Prometheus APIs. Add the injection shim only
+when exact decoder-layer timing is required. For servers launched with API-key
+authentication, set `VLLM_API_KEY`; the value is used as a bearer token for the
+request and metrics endpoint and is never serialized.
+
+### Python integration
+
+```python
+from pathlib import Path
+from layer_profiler.vllm import capture_vllm
+
+capture_vllm(
+    base_url="http://localhost:8000",
+    model="your-org/your-model",
+    prompt="Benchmark prompt",
+    max_tokens=32,
+    control_path=Path("traces/layer-profiler.control"),
+    events_path=Path("traces/layer-events.jsonl"),
+    output_path=Path("traces/run.json"),
+    layer_events=False,  # metrics-only; works on an unmodified vLLM server
+)
+```
+
 The class matcher covers common `DecoderLayer`, `TransformerLayer`, and
 `Block` names. Override `LLM_LAYER_CLASS_PATTERN` for a custom architecture.
 Only use the shim on a local profiling instance, never a production server.
@@ -154,9 +203,28 @@ See `examples/manual_generation.py` for a complete greedy KV-cache loop.
 
 ## Trace fields
 
-Each trace includes model/environment metadata, whole forward steps, generated
-tokens, layer events, tensor shapes, device, and supported CUDA/MPS allocation
-deltas. The `schema_version` field makes traces safe to evolve and compare.
+Each trace includes privacy-safe model/environment metadata, whole forward
+steps, generated-token indices, layer events, tensor shapes, device, supported
+CUDA/MPS allocation deltas, and optional normalized vLLM engine metrics. Schema
+`1.1` adds the top-level `metrics` object while preserving the existing event
+format.
+
+## Privacy defaults
+
+- Prompt, generated text, and reconstructable generated token IDs are excluded
+  unless `--include-content` is passed.
+- Server and metrics endpoint URLs are used for the request but never serialized.
+- Raw Prometheus labels are discarded; cache configuration uses a strict allowlist.
+- Environment metadata records only OS family and machine architecture—not a
+  hostname, username, home directory, or local path.
+- Absolute local model paths are serialized as `local-model`; registry model IDs
+  such as `Qwen/Qwen3.5-0.8B` are preserved.
+- Raw captures under `traces/` are ignored by Git; only the compact, sanitized
+  showcase dataset is published.
+
+CI also runs `scripts/privacy_audit.py` to reject common API keys, private keys,
+absolute home-directory paths, raw prompt content, endpoint URLs, and run IDs
+from publishable artifacts.
 
 ## Caveats
 

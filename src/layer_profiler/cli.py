@@ -6,6 +6,7 @@ import argparse
 from pathlib import Path
 
 from .profiler import LayerProfiler, ProfileConfig
+from .privacy import safe_model_identifier
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -22,6 +23,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--leaf-modules", action="store_true")
     parser.add_argument("--no-sync", action="store_true", help="Disable accurate accelerator synchronization")
     parser.add_argument("--trust-remote-code", action="store_true")
+    parser.add_argument(
+        "--include-content",
+        action="store_true",
+        help="Store prompt and token text (off by default for privacy)",
+    )
     return parser
 
 
@@ -62,16 +68,20 @@ def main() -> None:
     generated_ids = generated[0, prompt_length:].tolist()
     profiler.attach_generated_tokens(
         generated_ids,
-        decode=lambda token_id: tokenizer.decode([token_id]),
+        decode=(lambda token_id: tokenizer.decode([token_id])) if args.include_content else None,
+        include_ids=args.include_content,
     )
-    trace = profiler.trace(
-        model=args.model,
-        prompt=args.prompt,
+    trace_metadata = dict(
+        model=safe_model_identifier(args.model),
         prompt_tokens=prompt_length,
         generated_tokens=len(generated_ids),
         device=args.device,
         dtype=args.dtype,
+        content_recorded=args.include_content,
     )
+    if args.include_content:
+        trace_metadata["prompt"] = args.prompt
+    trace = profiler.trace(**trace_metadata)
     path = trace.write(args.output)
     print(f"Wrote {len(trace.events)} layer events across {len(trace.steps)} steps to {path}")
     if trace.errors:
@@ -82,4 +92,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

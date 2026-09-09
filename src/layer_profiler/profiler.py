@@ -145,6 +145,7 @@ class LayerProfiler:
         self,
         token_ids: Iterable[int],
         decode: Callable[[int], str] | None = None,
+        include_ids: bool = True,
     ) -> None:
         """Attach generated token IDs/text to already-recorded forward steps."""
         by_step = {step.step: step for step in self.steps}
@@ -159,7 +160,7 @@ class LayerProfiler:
                 TokenEvent(
                     token_index=token_index,
                     step=step,
-                    token_id=token_id,
+                    token_id=token_id if include_ids else None,
                     text=decode(token_id) if decode is not None else None,
                     emitted_ns=emitted_ns,
                 )
@@ -195,6 +196,7 @@ class LayerProfiler:
             events=list(self.events),
             steps=list(self.steps),
             tokens=list(self.tokens),
+            metrics={},
             errors=list(self.errors),
         )
 
@@ -323,4 +325,3 @@ class LayerProfiler:
             if len(shape) >= 2:
                 return int(shape[-2] if tensor is kwargs.get("inputs_embeds") else shape[-1])
         return None
-

@@ -48,6 +48,7 @@ events = frame(payload, "events")
 steps = frame(payload, "steps")
 tokens = frame(payload, "tokens")
 metadata = payload.get("metadata", {})
+server_metrics = payload.get("metrics", {})
 
 model_name = metadata.get("model", metadata.get("model_class", "Unknown model"))
 st.subheader(str(model_name))
@@ -55,9 +56,63 @@ if metadata.get("prompt"):
     st.caption(f"Prompt: {metadata['prompt']}")
 
 st.sidebar.caption(f"Source: {source}")
+if server_metrics.get("available"):
+    st.subheader("vLLM engine & KV cache")
+    cache = server_metrics.get("cache", {})
+    scheduler = server_metrics.get("scheduler", {})
+    counters = server_metrics.get("counters", {})
+    latency = server_metrics.get("latency_ms", {})
+    process_metrics = server_metrics.get("process", {})
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Peak KV-cache usage", f"{100 * cache.get('peak_usage', 0):.2f}%")
+    hit_rate = cache.get("prefix_hit_rate")
+    m2.metric("Prefix-cache hit rate", f"{100 * hit_rate:.1f}%" if hit_rate is not None else "N/A")
+    m3.metric("Peak running requests", f"{scheduler.get('peak_running', 0):g}")
+    ttft = latency.get("time_to_first_token_mean_ms")
+    m4.metric("vLLM TTFT", f"{ttft:.2f} ms" if ttft is not None else "N/A")
+    m5.metric("Peak server RSS", f"{process_metrics.get('peak_resident_memory_mb', 0):,.0f} MB")
+
+    metric_timeline = pd.DataFrame(server_metrics.get("timeline", []))
+    if not metric_timeline.empty:
+        engine_chart = go.Figure()
+        engine_chart.add_trace(
+            go.Scatter(
+                x=metric_timeline["elapsed_ms"],
+                y=metric_timeline["kv_cache_usage"] * 100,
+                name="KV-cache usage",
+                mode="lines",
+                fill="tozeroy",
+            )
+        )
+        engine_chart.add_trace(
+            go.Scatter(
+                x=metric_timeline["elapsed_ms"],
+                y=metric_timeline["requests_running"],
+                name="Running requests",
+                mode="lines",
+                yaxis="y2",
+            )
+        )
+        engine_chart.update_layout(
+            title="KV-cache pressure and scheduler activity during this request",
+            xaxis_title="Request elapsed time (ms)",
+            yaxis_title="KV-cache usage (%)",
+            yaxis2=dict(title="Requests", overlaying="y", side="right", rangemode="tozero"),
+            legend=dict(orientation="h"),
+        )
+        st.plotly_chart(engine_chart, use_container_width=True)
+
+    with st.expander("Engine metric details"):
+        st.json({"cache": cache, "scheduler": scheduler, "counters": counters, "latency_ms": latency})
+elif server_metrics:
+    st.info("This trace requested engine metrics, but the vLLM metrics endpoint was unavailable.")
+
 if events.empty:
-    st.warning("This trace has no layer events. Check the module selection pattern shown in metadata.")
-    st.json(metadata)
+    if server_metrics.get("available"):
+        st.info("Metrics-only trace: add the optional injection shim to capture the layer timeline.")
+    else:
+        st.warning("This trace has no layer events. Check the module selection pattern shown in metadata.")
+        st.json(metadata)
     st.stop()
 
 phase_options = events["phase"].dropna().unique().tolist()

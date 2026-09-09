@@ -60,3 +60,14 @@ def test_explicit_prefill_and_decode_are_attributed():
     assert len(profiler.steps) == 2
     assert profiler.trace().metadata["selected_modules"] == 1
 
+
+def test_generated_token_ids_can_be_excluded_for_privacy():
+    model = FakeModel()
+    config = ProfileConfig(synchronize_device=False, record_shapes=False, record_memory=False)
+    with LayerProfiler(model, config) as profiler:
+        profiler.profile_forward(model, 1, step=0)
+    profiler.attach_generated_tokens([42], include_ids=False)
+
+    token = profiler.trace().tokens[0]
+    assert token.token_id is None
+    assert token.text is None

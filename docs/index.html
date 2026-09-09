@@ -109,12 +109,17 @@
     .panel-head { display: flex; align-items: end; justify-content: space-between; gap: 16px; margin-bottom: 13px; }
     h2 { margin: 0; font-size: 15px; letter-spacing: -.02em; }
     .panel-kicker { color: var(--muted); font: 400 10px var(--mono); margin-top: 5px; }
+    .engine-stats { display: flex; flex-wrap: wrap; gap: 22px; margin: 10px 0 4px; }
+    .engine-stat { min-width: 130px; }
+    .engine-stat b { display: block; color: var(--text); font-size: 18px; letter-spacing: -.03em; }
+    .engine-stat span { color: var(--muted); font: 400 9px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
     .legend { display: flex; gap: 15px; color: var(--muted); font: 400 10px var(--mono); }
     .legend span { display: flex; align-items: center; gap: 5px; }
     .legend i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
     .plot { width: 100%; height: 470px; }
     #step-chart { height: 470px; }
     #timeline { height: 650px; }
+    #kv-chart { height: 330px; }
     #benchmark { height: 330px; }
 
     .explain {
@@ -190,7 +195,7 @@
       <article><span class="number">02 / ATTRIBUTE</span><h3>Separate prefill from decode</h3><p>Step zero represents prompt prefill and first-token latency. Every following step isolates one KV-cache decode pass.</p></article>
       <article><span class="number">03 / COMPARE</span><h3>Benchmark the same way</h3><p>Portable JSON traces make model, runtime, hardware, and configuration comparisons reproducible and easy to share.</p></article>
     </section>
-    <footer><span>LAYERLENS · TRACE SCHEMA 1.0</span><span>BUILT FOR REPRODUCIBLE INFERENCE ANALYSIS</span></footer>
+    <footer><span>LAYERLENS · TRACE SCHEMA 1.1</span><span>BUILT FOR REPRODUCIBLE INFERENCE ANALYSIS</span></footer>
   </main>
 
   <script>
@@ -223,8 +228,29 @@
           <section class="chart-panel"><div class="panel-head"><div><h2>Layer × token heatmap</h2><div class="panel-kicker">Color = execution duration · hover for exact values</div></div><div class="legend"><span><i style="background:${COLORS.cyan}"></i>Prefill</span><span><i style="background:${COLORS.violet}"></i>Decode</span></div></div><div id="heatmap" class="plot"></div></section>
           <section class="chart-panel"><div class="panel-head"><div><h2>Token-step latency</h2><div class="panel-kicker">Prefill vs. sequential decode passes</div></div></div><div id="step-chart" class="plot"></div></section>
           <section class="chart-panel full"><div class="panel-head"><div><h2>Execution timeline — what layer was running when</h2><div class="panel-kicker">Absolute time since capture start · each bar is one decoder-layer call</div></div></div><div id="timeline" class="plot"></div></section>
+          ${enginePanel(run)}
           <section class="chart-panel full"><div class="panel-head"><div><h2>Benchmark comparison</h2><div class="panel-kicker">Same model, prompt, runtime, and hardware · different generation windows</div></div></div><div id="benchmark" class="plot"></div></section>
         </div>`;
+    }
+
+    function enginePanel(run) {
+      const metrics = run.engineMetrics || {};
+      if (!metrics.available) return '';
+      const cache = metrics.cache || {};
+      const scheduler = metrics.scheduler || {};
+      const processMetrics = metrics.process || {};
+      const latency = metrics.latency_ms || {};
+      const hitRate = cache.prefix_hit_rate == null ? 'N/A' : `${(cache.prefix_hit_rate * 100).toFixed(1)}%`;
+      const ttft = latency.time_to_first_token_mean_ms == null ? 'N/A' : fmt(latency.time_to_first_token_mean_ms);
+      return `<section class="chart-panel full"><div class="panel-head"><div><h2>vLLM engine & KV-cache telemetry</h2><div class="panel-kicker">Request-scoped deltas from Prometheus · endpoint labels discarded</div></div></div>
+        <div class="engine-stats">
+          <div class="engine-stat"><b>${(100 * (cache.peak_usage || 0)).toFixed(2)}%</b><span>Peak KV-cache use</span></div>
+          <div class="engine-stat"><b>${hitRate}</b><span>Prefix-cache hit rate</span></div>
+          <div class="engine-stat"><b>${scheduler.peak_running || 0}</b><span>Peak running requests</span></div>
+          <div class="engine-stat"><b>${ttft}</b><span>vLLM TTFT</span></div>
+          <div class="engine-stat"><b>${scheduler.preemptions || 0}</b><span>Preemptions</span></div>
+          <div class="engine-stat"><b>${Math.round(processMetrics.peak_resident_memory_mb || 0).toLocaleString()} MB</b><span>Peak server RSS</span></div>
+        </div><div id="kv-chart" class="plot"></div></section>`;
     }
 
     function renderHeatmap(run) {
@@ -257,6 +283,16 @@
         {...baseLayout, barmode:'overlay', showlegend:false, margin:{l:72,r:14,t:12,b:58}, xaxis:{...baseLayout.xaxis,title:'Time since capture start (ms)'}, yaxis:{...baseLayout.yaxis,title:'Decoder layer', categoryorder:'array', categoryarray:[...Array(run.layerCount).keys()].reverse().map(layerLabel)}}, plotConfig);
     }
 
+    function renderEngineMetrics(run) {
+      const metrics = run.engineMetrics || {};
+      if (!metrics.available || !document.getElementById('kv-chart')) return;
+      const points = metrics.timeline || [];
+      Plotly.newPlot('kv-chart', [
+        {type:'scatter',mode:'lines',name:'KV-cache usage',x:points.map(p=>p.elapsed_ms),y:points.map(p=>100*p.kv_cache_usage),line:{color:COLORS.green,width:2},fill:'tozeroy',fillcolor:'rgba(78,227,160,.08)',hovertemplate:'%{x:.1f} ms<br>KV cache <b>%{y:.3f}%</b><extra></extra>'},
+        {type:'scatter',mode:'lines',name:'Running requests',x:points.map(p=>p.elapsed_ms),y:points.map(p=>p.requests_running),line:{color:COLORS.amber,width:2,shape:'hv'},yaxis:'y2',hovertemplate:'%{x:.1f} ms<br>Running <b>%{y}</b><extra></extra>'}
+      ], {...baseLayout,margin:{l:66,r:64,t:36,b:52},legend:{orientation:'h',x:0,y:1.15,font:{color:COLORS.muted}},xaxis:{...baseLayout.xaxis,title:'Request elapsed time (ms)'},yaxis:{...baseLayout.yaxis,title:'KV-cache usage (%)',rangemode:'tozero'},yaxis2:{title:'Running requests',overlaying:'y',side:'right',rangemode:'tozero',gridcolor:'rgba(0,0,0,0)',tickfont:{color:COLORS.muted}}},plotConfig);
+    }
+
     function renderBenchmark() {
       const labels = runs.map(r=>r.label);
       Plotly.newPlot('benchmark', [
@@ -269,7 +305,7 @@
       const run = runs[index];
       document.getElementById('dashboard').innerHTML = shell(run);
       document.getElementById('run-meta').textContent = `${run.model} · ${run.device.toUpperCase()} · ${run.promptTokens} prompt tokens · ${run.tokenCount} generated`;
-      renderHeatmap(run); renderSteps(run); renderTimeline(run); renderBenchmark();
+      renderHeatmap(run); renderSteps(run); renderTimeline(run); renderEngineMetrics(run); renderBenchmark();
     }
 
     fetch('./runs.json').then(response => {

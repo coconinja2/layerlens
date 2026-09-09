@@ -9,6 +9,8 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from .metrics import VLLMMetricsSampler
+from .privacy import safe_model_identifier
 from .trace import InferenceTrace, LayerEvent, StepEvent, TokenEvent, environment_metadata
 
 
@@ -21,10 +23,26 @@ def capture_vllm(
     control_path: Path,
     events_path: Path,
     output_path: Path,
+    include_content: bool = False,
+    collect_metrics: bool = True,
+    metrics_url: str | None = None,
+    metrics_sample_ms: int = 50,
+    layer_events: bool = True,
+    request_headers: dict[str, str] | None = None,
 ) -> Path:
     run_id = uuid.uuid4().hex
-    control_path.parent.mkdir(parents=True, exist_ok=True)
-    control_path.write_text(run_id, encoding="utf-8")
+    if layer_events:
+        control_path.parent.mkdir(parents=True, exist_ok=True)
+        control_path.write_text(run_id, encoding="utf-8")
+    sampler = None
+    if collect_metrics:
+        sampler = VLLMMetricsSampler(
+            metrics_url or f"{base_url.rstrip('/')}/metrics",
+            model=model,
+            interval_ms=metrics_sample_ms,
+            headers=request_headers,
+        )
+        sampler.start()
     started = time.perf_counter()
     response_payload: dict[str, Any] = {}
     try:
@@ -39,14 +57,16 @@ def capture_vllm(
         request = urllib.request.Request(
             f"{base_url.rstrip('/')}/v1/completions",
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", **(request_headers or {})},
             method="POST",
         )
         with urllib.request.urlopen(request, timeout=600) as response:
             response_payload = json.load(response)
     finally:
-        control_path.write_text("off", encoding="utf-8")
-    elapsed_s = time.perf_counter() - started
+        if layer_events:
+            control_path.write_text("off", encoding="utf-8")
+        elapsed_s = time.perf_counter() - started
+        server_metrics = sampler.stop() if sampler is not None else {}
 
     rows = []
     if events_path.exists():
@@ -57,13 +77,13 @@ def capture_vllm(
                 continue
             if row.get("run_id") == run_id:
                 rows.append(row)
-    if not rows:
+    if layer_events and not rows:
         raise RuntimeError(
             "vLLM returned a completion but produced no matching layer events. "
             "Check the injection mount and LLM_LAYER_CLASS_PATTERN."
         )
 
-    origin_ns = min(row["started_ns"] for row in rows)
+    origin_ns = min((row["started_ns"] for row in rows), default=0)
     events = [
         LayerEvent(
             sequence=index,
@@ -115,17 +135,25 @@ def capture_vllm(
     metadata = environment_metadata()
     metadata.update(
         {
-            "source": "vllm-injected",
+            "source": "vllm-injected" if layer_events else "vllm-prometheus",
             "run_id": run_id,
-            "model": model,
-            "prompt": prompt,
+            "model": safe_model_identifier(model),
             "prompt_tokens": usage.get("prompt_tokens"),
             "generated_tokens": completion_count,
             "request_duration_s": elapsed_s,
-            "base_url": base_url,
-            "generated_text": response_payload.get("choices", [{}])[0].get("text", ""),
             "selected_modules": len({event.module for event in events}),
-            "step_timing_scope": "decoder_layer_span",
+            "step_timing_scope": "decoder_layer_span" if layer_events else "not_recorded",
+            "content_recorded": include_content,
+            "server_metrics_collected": bool(server_metrics.get("available", False)),
         }
     )
-    return InferenceTrace(metadata=metadata, events=events, steps=steps, tokens=tokens).write(output_path)
+    if include_content:
+        metadata["prompt"] = prompt
+        metadata["generated_text"] = response_payload.get("choices", [{}])[0].get("text", "")
+    return InferenceTrace(
+        metadata=metadata,
+        events=events,
+        steps=steps,
+        tokens=tokens,
+        metrics=server_metrics,
+    ).write(output_path)

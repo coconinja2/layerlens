@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 
-TRACE_SCHEMA_VERSION = "1.0"
+TRACE_SCHEMA_VERSION = "1.1"
 
 
 @dataclass
@@ -78,6 +78,7 @@ class InferenceTrace:
     events: list[LayerEvent]
     steps: list[StepEvent] = field(default_factory=list)
     tokens: list[TokenEvent] = field(default_factory=list)
+    metrics: dict[str, Any] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -87,6 +88,7 @@ class InferenceTrace:
             "steps": [step.to_dict() for step in self.steps],
             "tokens": [token.to_dict() for token in self.tokens],
             "events": [event.to_dict() for event in self.events],
+            "metrics": self.metrics,
             "errors": self.errors,
         }
 
@@ -101,7 +103,8 @@ def environment_metadata() -> dict[str, Any]:
     metadata = {
         "created_at": datetime.now(timezone.utc).isoformat(),
         "python": sys.version.split()[0],
-        "platform": platform.platform(),
+        "system": platform.system(),
+        "machine": platform.machine(),
     }
     try:
         import torch
@@ -114,4 +117,3 @@ def environment_metadata() -> dict[str, Any]:
     except ImportError:
         metadata["torch"] = None
     return metadata
-

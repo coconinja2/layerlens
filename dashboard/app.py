@@ -57,59 +57,80 @@ if metadata.get("prompt"):
 
 st.sidebar.caption(f"Source: {source}")
 if server_metrics.get("available"):
-    st.subheader("vLLM engine & KV cache")
     cache = server_metrics.get("cache", {})
-    scheduler = server_metrics.get("scheduler", {})
     counters = server_metrics.get("counters", {})
     latency = server_metrics.get("latency_ms", {})
-    process_metrics = server_metrics.get("process", {})
-    m1, m2, m3, m4, m5 = st.columns(5)
-    m1.metric("Peak KV-cache usage", f"{100 * cache.get('peak_usage', 0):.2f}%")
-    hit_rate = cache.get("prefix_hit_rate")
-    m2.metric("Prefix-cache hit rate", f"{100 * hit_rate:.1f}%" if hit_rate is not None else "N/A")
-    m3.metric("Peak running requests", f"{scheduler.get('peak_running', 0):g}")
-    ttft = latency.get("time_to_first_token_mean_ms")
-    m4.metric("vLLM TTFT", f"{ttft:.2f} ms" if ttft is not None else "N/A")
-    m5.metric("Peak server RSS", f"{process_metrics.get('peak_resident_memory_mb', 0):,.0f} MB")
+    if server_metrics.get("source") == "ollama_api":
+        st.subheader("Ollama runtime telemetry")
+        throughput = server_metrics.get("throughput", {})
+        runtime = server_metrics.get("runtime", {})
+        context_use = cache.get("estimated_context_utilization")
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Estimated context use", f"{100 * context_use:.2f}%" if context_use is not None else "N/A")
+        m2.metric("Prompt throughput", f"{throughput.get('prompt_tokens_per_second', 0):.2f} tok/s")
+        m3.metric("Generation throughput", f"{throughput.get('generation_tokens_per_second', 0):.2f} tok/s")
+        m4.metric("Model load", f"{latency.get('load', 0):,.2f} ms")
+        m5.metric("Processor memory", f"{runtime.get('processor_memory_mb', 0):,.0f} MB")
+        phases = pd.DataFrame(
+            {
+                "phase": ["Model load", "Prompt evaluation", "Generation", "Runtime overhead"],
+                "duration_ms": [
+                    latency.get("load", 0),
+                    latency.get("prompt_eval", 0),
+                    latency.get("generation", 0),
+                    latency.get("runtime_overhead", 0),
+                ],
+            }
+        )
+        st.plotly_chart(
+            px.bar(phases, x="phase", y="duration_ms", color="phase", title="Ollama runtime phases"),
+            use_container_width=True,
+        )
+        st.caption("Ollama does not expose block-level KV occupancy; context utilization is an estimate.")
+        with st.expander("Ollama metric details"):
+            st.json(server_metrics)
+    else:
+        st.subheader("vLLM engine & KV cache")
+        scheduler = server_metrics.get("scheduler", {})
+        process_metrics = server_metrics.get("process", {})
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Peak KV-cache usage", f"{100 * cache.get('peak_usage', 0):.2f}%")
+        hit_rate = cache.get("prefix_hit_rate")
+        m2.metric("Prefix-cache hit rate", f"{100 * hit_rate:.1f}%" if hit_rate is not None else "N/A")
+        m3.metric("Peak running requests", f"{scheduler.get('peak_running', 0):g}")
+        ttft = latency.get("time_to_first_token_mean_ms")
+        m4.metric("vLLM TTFT", f"{ttft:.2f} ms" if ttft is not None else "N/A")
+        m5.metric("Peak server RSS", f"{process_metrics.get('peak_resident_memory_mb', 0):,.0f} MB")
 
-    metric_timeline = pd.DataFrame(server_metrics.get("timeline", []))
-    if not metric_timeline.empty:
-        engine_chart = go.Figure()
-        engine_chart.add_trace(
-            go.Scatter(
-                x=metric_timeline["elapsed_ms"],
-                y=metric_timeline["kv_cache_usage"] * 100,
-                name="KV-cache usage",
-                mode="lines",
-                fill="tozeroy",
+        metric_timeline = pd.DataFrame(server_metrics.get("timeline", []))
+        if not metric_timeline.empty:
+            engine_chart = go.Figure()
+            engine_chart.add_trace(
+                go.Scatter(x=metric_timeline["elapsed_ms"], y=metric_timeline["kv_cache_usage"] * 100, name="KV-cache usage", mode="lines", fill="tozeroy")
             )
-        )
-        engine_chart.add_trace(
-            go.Scatter(
-                x=metric_timeline["elapsed_ms"],
-                y=metric_timeline["requests_running"],
-                name="Running requests",
-                mode="lines",
-                yaxis="y2",
+            engine_chart.add_trace(
+                go.Scatter(x=metric_timeline["elapsed_ms"], y=metric_timeline["requests_running"], name="Running requests", mode="lines", yaxis="y2")
             )
-        )
-        engine_chart.update_layout(
-            title="KV-cache pressure and scheduler activity during this request",
-            xaxis_title="Request elapsed time (ms)",
-            yaxis_title="KV-cache usage (%)",
-            yaxis2=dict(title="Requests", overlaying="y", side="right", rangemode="tozero"),
-            legend=dict(orientation="h"),
-        )
-        st.plotly_chart(engine_chart, use_container_width=True)
-
-    with st.expander("Engine metric details"):
-        st.json({"cache": cache, "scheduler": scheduler, "counters": counters, "latency_ms": latency})
+            engine_chart.update_layout(
+                title="KV-cache pressure and scheduler activity during this request",
+                xaxis_title="Request elapsed time (ms)",
+                yaxis_title="KV-cache usage (%)",
+                yaxis2=dict(title="Requests", overlaying="y", side="right", rangemode="tozero"),
+                legend=dict(orientation="h"),
+            )
+            st.plotly_chart(engine_chart, use_container_width=True)
+        with st.expander("Engine metric details"):
+            st.json({"cache": cache, "scheduler": scheduler, "counters": counters, "latency_ms": latency})
 elif server_metrics:
     st.info("This trace requested engine metrics, but the vLLM metrics endpoint was unavailable.")
 
 if events.empty:
     if server_metrics.get("available"):
-        st.info("Metrics-only trace: add the optional injection shim to capture the layer timeline.")
+        source_kind = server_metrics.get("source")
+        if source_kind == "ollama_api":
+            st.info("Ollama trace: native API metrics are available; layer boundaries are not exposed by Ollama.")
+        else:
+            st.info("Metrics-only trace: add the optional injection shim to capture the layer timeline.")
     else:
         st.warning("This trace has no layer events. Check the module selection pattern shown in metadata.")
         st.json(metadata)

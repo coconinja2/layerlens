@@ -17,7 +17,12 @@ It records every transformer layer during:
 
 - the prefill pass that produces the first token;
 - each subsequent KV-cache decode pass;
-- in-process Hugging Face inference or a real vLLM server.
+- in-process Hugging Face inference or an instrumented vLLM server.
+
+For standard vLLM and Ollama endpoints, LayerLens also captures the native
+engine/runtime metrics those APIs expose, without requiring model-specific
+code. Exact layer timing remains opt-in because it requires execution inside
+the model process.
 
 The output is a portable JSON trace. A Streamlit dashboard turns it into a
 first-token/decode scorecard, layer-by-token heatmap, sequential layer chart,
@@ -36,8 +41,24 @@ not need to run continuously or in real time.
 ![LayerLens vLLM KV-cache and scheduler telemetry](docs/layerlens-kv-metrics.png)
 
 The included showcase contains two real Qwen3.5 0.8B runs captured from an
-instrumented vLLM CPU server. The browser dashboard is static and deploys on
-GitHub Pages; the Streamlit explorer supports arbitrary local trace uploads.
+instrumented vLLM CPU server, a direct Hugging Face GPT-2 run, and a native
+Ollama Gemma4 12B run. The browser dashboard is static and deploys on GitHub
+Pages; the Streamlit explorer supports arbitrary local trace uploads.
+
+## Validated model matrix
+
+| Model | Runtime | Layer timeline | Engine/runtime metrics | Result |
+|---|---|---:|---:|---:|
+| Qwen3.5 0.8B | vLLM 0.27.1 | Yes, 24 layers | Yes, including KV cache | Pass |
+| GPT-2 | Hugging Face Transformers | Yes, 12 layers | In-process timing | Pass |
+| Gemma4 12B Q4_K_M | Ollama 0.32.14 | Not exposed by Ollama | Yes, native API | Pass |
+
+![LayerLens comparing an Ollama model with vLLM and Hugging Face runs](docs/layerlens-multi-model.png)
+
+Model selection is runtime-driven rather than hard-coded. Hugging Face layer
+paths are discovered with a configurable regex, vLLM class matching is
+configurable through `LLM_LAYER_CLASS_PATTERN`, and Ollama accepts any locally
+installed or cloud-accessible model name.
 
 ## Measurement model
 
@@ -158,6 +179,25 @@ capture_vllm(
     layer_events=False,  # metrics-only; works on an unmodified vLLM server
 )
 ```
+
+## Benchmark Ollama models
+
+Ollama exposes aggregate load, prompt-evaluation, generation, and token metrics
+through its native API. LayerLens also records safe model architecture,
+quantization, context capacity, and loaded processor-memory data:
+
+```bash
+poetry run layerlens-ollama \
+  --model gemma4:12b \
+  --prompt "Benchmark prompt" \
+  --max-tokens 8 \
+  --output traces/gemma4.json
+```
+
+Ollama does not currently expose actual block-level KV-cache occupancy through
+its API. LayerLens therefore reports estimated context utilization separately
+and never labels it as measured KV-cache usage. Cloud authentication uses
+`OLLAMA_API_KEY`, which is never written to the trace.
 
 The class matcher covers common `DecoderLayer`, `TransformerLayer`, and
 `Block` names. Override `LLM_LAYER_CLASS_PATTERN` for a custom architecture.

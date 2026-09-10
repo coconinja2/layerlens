@@ -177,8 +177,8 @@
         <p class="hero-copy">LayerLens reveals exactly when each transformer layer executes—from prompt prefill through every KV-cache decode step—so inference bottlenecks become visible, measurable, and comparable.</p>
       </div>
       <div class="hero-side">
-        <strong>LIVE CAPTURE · QWEN3.5 0.8B</strong>
-        A real vLLM CPU run instrumented at the decoder-layer boundary. Hover any cell or timeline bar to inspect its exact timestamp and duration.
+        <strong>VALIDATED · vLLM + OLLAMA + HF</strong>
+        Real runs across three inference stacks. Compare model-level throughput, engine telemetry, and exact layer timing wherever the runtime exposes it.
       </div>
     </section>
 
@@ -216,26 +216,49 @@
     };
 
     function shell(run) {
+      const aggregate = run.backend === 'Ollama';
+      const blockCount = run.engineMetrics?.runtime?.architecture?.block_count;
       return `
         <div class="metrics">
-          <div class="metric"><div class="metric-label">First token · TTFT</div><div class="metric-value">${fmt(run.ttftMs)}</div><div class="metric-note">PROMPT PREFILL</div></div>
-          <div class="metric"><div class="metric-label">Mean decode</div><div class="metric-value">${fmt(run.meanDecodeMs)}</div><div class="metric-note">PER LATER TOKEN</div></div>
+          <div class="metric"><div class="metric-label">${aggregate ? 'Prompt evaluation' : 'First token · TTFT'}</div><div class="metric-value">${fmt(run.ttftMs)}</div><div class="metric-note">${aggregate ? 'OLLAMA API' : 'PROMPT PREFILL'}</div></div>
+          <div class="metric"><div class="metric-label">${aggregate ? 'Mean output token' : 'Mean decode'}</div><div class="metric-value">${fmt(run.meanDecodeMs)}</div><div class="metric-note">${aggregate ? 'OLLAMA API AVERAGE' : 'PER LATER TOKEN'}</div></div>
           <div class="metric"><div class="metric-label">Decode rate</div><div class="metric-value">${run.decodeTokensPerSecond.toFixed(2)}</div><div class="metric-note">TOKENS / SECOND</div></div>
-          <div class="metric"><div class="metric-label">Layer calls</div><div class="metric-value">${run.eventCount}</div><div class="metric-note">${run.layerCount} DECODER LAYERS</div></div>
+          <div class="metric"><div class="metric-label">${run.eventCount ? 'Layer calls' : 'Model blocks'}</div><div class="metric-value">${run.eventCount || blockCount || '—'}</div><div class="metric-note">${run.eventCount ? `${run.layerCount} DECODER LAYERS` : 'ARCHITECTURE METADATA'}</div></div>
           <div class="metric"><div class="metric-label">Request wall time</div><div class="metric-value">${fmt(run.requestMs)}</div><div class="metric-note">CLIENT OBSERVED</div></div>
         </div>
         <div class="chart-grid">
-          <section class="chart-panel"><div class="panel-head"><div><h2>Layer × token heatmap</h2><div class="panel-kicker">Color = execution duration · hover for exact values</div></div><div class="legend"><span><i style="background:${COLORS.cyan}"></i>Prefill</span><span><i style="background:${COLORS.violet}"></i>Decode</span></div></div><div id="heatmap" class="plot"></div></section>
-          <section class="chart-panel"><div class="panel-head"><div><h2>Token-step latency</h2><div class="panel-kicker">Prefill vs. sequential decode passes</div></div></div><div id="step-chart" class="plot"></div></section>
-          <section class="chart-panel full"><div class="panel-head"><div><h2>Execution timeline — what layer was running when</h2><div class="panel-kicker">Absolute time since capture start · each bar is one decoder-layer call</div></div></div><div id="timeline" class="plot"></div></section>
+          ${layerPanels(run)}
           ${enginePanel(run)}
-          <section class="chart-panel full"><div class="panel-head"><div><h2>Benchmark comparison</h2><div class="panel-kicker">Same model, prompt, runtime, and hardware · different generation windows</div></div></div><div id="benchmark" class="plot"></div></section>
+          <section class="chart-panel full"><div class="panel-head"><div><h2>Cross-model benchmark comparison</h2><div class="panel-kicker">Runtime-native phases · compare prompt/prefill and output/decode directionally</div></div></div><div id="benchmark" class="plot"></div></section>
         </div>`;
+    }
+
+    function layerPanels(run) {
+      if (!run.events.length) return '';
+      return `<section class="chart-panel"><div class="panel-head"><div><h2>Layer × token heatmap</h2><div class="panel-kicker">Color = execution duration · hover for exact values</div></div><div class="legend"><span><i style="background:${COLORS.cyan}"></i>Prefill</span><span><i style="background:${COLORS.violet}"></i>Decode</span></div></div><div id="heatmap" class="plot"></div></section>
+        <section class="chart-panel"><div class="panel-head"><div><h2>Token-step latency</h2><div class="panel-kicker">Prefill vs. sequential decode passes</div></div></div><div id="step-chart" class="plot"></div></section>
+        <section class="chart-panel full"><div class="panel-head"><div><h2>Execution timeline — what layer was running when</h2><div class="panel-kicker">Absolute time since capture start · each bar is one decoder-layer call</div></div></div><div id="timeline" class="plot"></div></section>`;
     }
 
     function enginePanel(run) {
       const metrics = run.engineMetrics || {};
       if (!metrics.available) return '';
+      if (metrics.source === 'ollama_api') {
+        const cache = metrics.cache || {};
+        const runtime = metrics.runtime || {};
+        const throughput = metrics.throughput || {};
+        const latency = metrics.latency_ms || {};
+        const contextUse = cache.estimated_context_utilization == null ? 'N/A' : `${(100 * cache.estimated_context_utilization).toFixed(2)}%`;
+        return `<section class="chart-panel full"><div class="panel-head"><div><h2>Ollama runtime telemetry</h2><div class="panel-kicker">Native aggregate API timings · context use is estimated, not block-level KV occupancy</div></div></div>
+          <div class="engine-stats">
+            <div class="engine-stat"><b>${contextUse}</b><span>Estimated context use</span></div>
+            <div class="engine-stat"><b>${(throughput.prompt_tokens_per_second || 0).toFixed(2)}</b><span>Prompt tokens / sec</span></div>
+            <div class="engine-stat"><b>${(throughput.generation_tokens_per_second || 0).toFixed(2)}</b><span>Output tokens / sec</span></div>
+            <div class="engine-stat"><b>${fmt(latency.load || 0)}</b><span>Model load</span></div>
+            <div class="engine-stat"><b>${Math.round(runtime.processor_memory_mb || 0).toLocaleString()} MB</b><span>Processor memory</span></div>
+            <div class="engine-stat"><b>${runtime.quantization || 'N/A'}</b><span>Quantization</span></div>
+          </div><div id="kv-chart" class="plot"></div></section>`;
+      }
       const cache = metrics.cache || {};
       const scheduler = metrics.scheduler || {};
       const processMetrics = metrics.process || {};
@@ -286,6 +309,14 @@
     function renderEngineMetrics(run) {
       const metrics = run.engineMetrics || {};
       if (!metrics.available || !document.getElementById('kv-chart')) return;
+      if (metrics.source === 'ollama_api') {
+        const latency = metrics.latency_ms || {};
+        const labels = ['Model load','Prompt evaluation','Generation','Runtime overhead'];
+        const values = [latency.load || 0,latency.prompt_eval || 0,latency.generation || 0,latency.runtime_overhead || 0];
+        Plotly.newPlot('kv-chart', [{type:'bar',x:labels,y:values,marker:{color:[COLORS.amber,COLORS.cyan,COLORS.violet,COLORS.green]},text:values.map(fmt),textposition:'outside',cliponaxis:false,hovertemplate:'%{x}<br><b>%{y:.3f} ms</b><extra></extra>'}],
+          {...baseLayout,margin:{l:66,r:20,t:38,b:52},xaxis:{...baseLayout.xaxis,title:'Ollama runtime phase'},yaxis:{...baseLayout.yaxis,title:'Duration (ms)',rangemode:'tozero'}},plotConfig);
+        return;
+      }
       const points = metrics.timeline || [];
       Plotly.newPlot('kv-chart', [
         {type:'scatter',mode:'lines',name:'KV-cache usage',x:points.map(p=>p.elapsed_ms),y:points.map(p=>100*p.kv_cache_usage),line:{color:COLORS.green,width:2},fill:'tozeroy',fillcolor:'rgba(78,227,160,.08)',hovertemplate:'%{x:.1f} ms<br>KV cache <b>%{y:.3f}%</b><extra></extra>'},
@@ -296,16 +327,17 @@
     function renderBenchmark() {
       const labels = runs.map(r=>r.label);
       Plotly.newPlot('benchmark', [
-        {type:'bar',name:'TTFT',x:labels,y:runs.map(r=>r.ttftMs),marker:{color:COLORS.cyan},hovertemplate:'%{x}<br>TTFT <b>%{y:.2f} ms</b><extra></extra>'},
-        {type:'bar',name:'Mean decode',x:labels,y:runs.map(r=>r.meanDecodeMs),marker:{color:COLORS.violet},hovertemplate:'%{x}<br>Mean decode <b>%{y:.2f} ms</b><extra></extra>'}
-      ], {...baseLayout,barmode:'group',margin:{l:64,r:15,t:28,b:50},legend:{orientation:'h',x:0,y:1.16,font:{color:COLORS.muted}},xaxis:{...baseLayout.xaxis,title:'Captured generation window'},yaxis:{...baseLayout.yaxis,title:'Latency (ms)',rangemode:'tozero'}},plotConfig);
+        {type:'bar',name:'Prompt / prefill',x:labels,y:runs.map(r=>r.ttftMs),marker:{color:COLORS.cyan},hovertemplate:'%{x}<br>Prompt / prefill <b>%{y:.2f} ms</b><extra></extra>'},
+        {type:'bar',name:'Output / decode mean',x:labels,y:runs.map(r=>r.meanDecodeMs),marker:{color:COLORS.violet},hovertemplate:'%{x}<br>Output / decode mean <b>%{y:.2f} ms</b><extra></extra>'}
+      ], {...baseLayout,barmode:'group',margin:{l:64,r:15,t:28,b:88},legend:{orientation:'h',x:0,y:1.16,font:{color:COLORS.muted}},xaxis:{...baseLayout.xaxis,title:'Model · runtime · generation window',tickangle:-18},yaxis:{...baseLayout.yaxis,title:'Latency (ms)',rangemode:'tozero'}},plotConfig);
     }
 
     function renderRun(index) {
       const run = runs[index];
       document.getElementById('dashboard').innerHTML = shell(run);
-      document.getElementById('run-meta').textContent = `${run.model} · ${run.device.toUpperCase()} · ${run.promptTokens} prompt tokens · ${run.tokenCount} generated`;
-      renderHeatmap(run); renderSteps(run); renderTimeline(run); renderEngineMetrics(run); renderBenchmark();
+      document.getElementById('run-meta').textContent = `${run.model} · ${run.backend} · ${run.promptTokens} prompt tokens · ${run.tokenCount} generated`;
+      if (run.events.length) { renderHeatmap(run); renderSteps(run); renderTimeline(run); }
+      renderEngineMetrics(run); renderBenchmark();
     }
 
     fetch('./runs.json').then(response => {
@@ -315,9 +347,10 @@
       runs = data.runs;
       const select = document.getElementById('run-select');
       runs.forEach((run,index) => select.add(new Option(run.label,index)));
-      select.value = runs.length - 1;
+      const defaultIndex = Math.max(0, runs.findIndex(run => run.id === 'qwen-vllm-8-token'));
+      select.value = defaultIndex;
       select.addEventListener('change', event => renderRun(Number(event.target.value)));
-      renderRun(runs.length - 1);
+      renderRun(defaultIndex);
     }).catch(error => {
       document.getElementById('dashboard').innerHTML = `<div class="loading">${error.message}. Serve this directory over HTTP.</div>`;
     });

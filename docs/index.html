@@ -5,6 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="LayerLens visualizes when every transformer layer runs during LLM prefill and token decode.">
   <meta name="theme-color" content="#070b16">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://coconinja2.github.io/layerlens/">
+  <meta property="og:title" content="LayerLens — Every layer. Every token. Every millisecond.">
+  <meta property="og:description" content="Pluggable LLM inference observability for vLLM, Ollama, Hugging Face, and custom runtimes.">
+  <meta property="og:image" content="https://coconinja2.github.io/layerlens/layerlens-social-card.png">
+  <meta property="og:image:width" content="1734">
+  <meta property="og:image:height" content="907">
+  <meta property="og:image:alt" content="LayerLens transformer heatmaps and execution timelines">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="LayerLens — Every layer. Every token. Every millisecond.">
+  <meta name="twitter:description" content="Pluggable LLM inference observability for vLLM, Ollama, Hugging Face, and custom runtimes.">
+  <meta name="twitter:image" content="https://coconinja2.github.io/layerlens/layerlens-social-card.png">
+  <meta name="twitter:image:alt" content="LayerLens transformer heatmaps and execution timelines">
   <title>LayerLens — Every layer. Every token. Every millisecond.</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -130,6 +143,24 @@
     .explain .number { color: var(--cyan); font: 500 11px var(--mono); }
     .explain h3 { font-size: 16px; margin: 16px 0 9px; }
     .explain p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+
+    .integrate {
+      margin-top: 72px; padding: 34px; display: grid; grid-template-columns: .9fr 1.1fr; gap: 48px;
+      border: 1px solid var(--border); border-radius: 18px; overflow: hidden;
+      background: linear-gradient(135deg, rgba(73, 215, 255, .07), rgba(155, 135, 255, .05) 48%, rgba(11, 17, 32, .9));
+    }
+    .integrate h2 { max-width: 520px; font-size: clamp(28px, 3vw, 44px); line-height: 1.08; letter-spacing: -.045em; }
+    .integrate-copy { max-width: 580px; margin: 18px 0 22px; color: var(--muted); font-size: 14px; line-height: 1.7; }
+    .adapter-list { display: flex; gap: 8px; flex-wrap: wrap; }
+    .adapter-list span { padding: 7px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--text); background: rgba(7, 11, 22, .65); font: 500 10px var(--mono); }
+    .integration-actions { margin-top: 25px; display: flex; gap: 12px; flex-wrap: wrap; }
+    .integration-actions a { padding: 10px 14px; border-radius: 9px; color: #06101b; background: var(--cyan); text-decoration: none; font-size: 12px; font-weight: 800; }
+    .integration-actions a.secondary { color: var(--text); background: transparent; border: 1px solid var(--border); }
+    .code-card { align-self: center; padding: 22px; border: 1px solid rgba(159, 177, 215, .18); border-radius: 13px; background: rgba(5, 9, 18, .88); box-shadow: 0 22px 70px rgba(0, 0, 0, .25); }
+    .code-title { display: flex; justify-content: space-between; margin-bottom: 18px; color: var(--muted); font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+    .code-card pre { margin: 0; overflow-x: auto; color: #d9e2fa; font: 400 12px/1.75 var(--mono); white-space: pre-wrap; }
+    .code-card .cyan { color: var(--cyan); }
+    .code-card .violet { color: var(--violet); }
     footer { padding: 28px 0 0; color: var(--muted); font: 400 10px var(--mono); display: flex; justify-content: space-between; }
 
     .loading { min-height: 560px; display: grid; place-items: center; color: var(--muted); font: 12px var(--mono); }
@@ -141,6 +172,7 @@
       .metric { border-bottom: 1px solid var(--border); }
       .chart-grid { grid-template-columns: 1fr; }
       .chart-panel, .chart-panel:nth-child(2n) { border-right: 0; }
+      .integrate { grid-template-columns: 1fr; }
       .explain { grid-template-columns: 1fr; }
     }
     @media (max-width: 620px) {
@@ -155,6 +187,7 @@
       .chart-panel { padding: 18px 10px; }
       .panel-head { padding: 0 8px; align-items: flex-start; flex-direction: column; }
       .plot, #step-chart { height: 400px; }
+      .integrate { padding: 25px 20px; gap: 28px; }
     }
   </style>
 </head>
@@ -165,7 +198,7 @@
     <div class="nav-links">
       <a href="#explorer">Explorer</a>
       <a href="#method">Method</a>
-      <a href="https://github.com/coconinja2/layerlens/blob/main/INTEGRATION.md">Integrate</a>
+      <a href="#integrate">Integrate</a>
       <a class="github-link" href="https://github.com/coconinja2/layerlens">View source ↗</a>
     </div>
   </nav>
@@ -189,6 +222,32 @@
         <div class="run-meta" id="run-meta">Loading trace…</div>
       </div>
       <div class="dashboard" id="dashboard"><div class="loading">Loading instrumented layer events…</div></div>
+    </section>
+
+    <section class="integrate" id="integrate">
+      <div>
+        <div class="eyebrow">One trace contract · any runtime</div>
+        <h2>Plug LayerLens into your inference stack.</h2>
+        <p class="integrate-copy">Use the built-in collectors, embed the Python API, or publish a third-party adapter. Installed adapters appear in the same CLI automatically—without changing LayerLens source.</p>
+        <div class="adapter-list"><span>vLLM</span><span>Ollama</span><span>Hugging Face</span><span>Custom adapters</span><span>Privacy-safe defaults</span></div>
+        <div class="integration-actions">
+          <a href="https://github.com/coconinja2/layerlens/blob/main/INTEGRATION.md">Integration guide ↗</a>
+          <a class="secondary" href="https://github.com/coconinja2/layerlens/blob/main/examples/custom_adapter.py">Adapter template ↗</a>
+        </div>
+      </div>
+      <div class="code-card">
+        <div class="code-title"><span>Runtime-neutral capture</span><span>LayerLens 0.4</span></div>
+        <pre><span class="cyan">$</span> layerlens-capture --list-runtimes
+ollama
+vllm
+my-runtime
+
+<span class="cyan">$</span> layerlens-capture \
+  --runtime <span class="violet">my-runtime</span> \
+  --model provider/model \
+  --prompt "Benchmark prompt" \
+  --output traces/run.json</pre>
+      </div>
     </section>
 
     <section class="explain" id="method">

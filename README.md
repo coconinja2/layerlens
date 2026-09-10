@@ -39,6 +39,8 @@ the generic CLI discovers it without a LayerLens source-code change.
 Ollama, Python embedding, adapter packaging, supported options, privacy rules,
 and a complete custom HTTP adapter template.
 
+![LayerLens pluggable runtime adapter workflow](docs/layerlens-pluggable.png)
+
 It records every transformer layer during:
 
 - the prefill pass that produces the first token;

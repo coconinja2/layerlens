@@ -1,6 +1,6 @@
 [project]
 name = "layerlens"
-version = "0.4.0"
+version = "0.5.0"
 description = "Visual, layer-by-layer observability for autoregressive LLM inference"
 authors = [
     { name = "coconinja2" },

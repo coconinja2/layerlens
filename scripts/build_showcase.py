@@ -9,6 +9,9 @@ import re
 from pathlib import Path
 from typing import Any
 
+from layer_profiler.analysis import aggregate_event_grid, diagnose_trace
+from layer_profiler.metrics import runtime_events_from_metrics
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_INPUTS = [
@@ -34,6 +37,19 @@ def compact_trace(path: Path) -> dict[str, Any]:
     engine_metrics = payload.get("metrics", {})
     source = metadata.get("source", "unknown")
     backend = "Ollama" if source == "ollama" else "vLLM" if source.startswith("vllm") else "Hugging Face"
+    if engine_metrics.get("available") and "capabilities" not in engine_metrics:
+        if source.startswith("vllm"):
+            engine_metrics["capabilities"] = {
+                "kv_cache_usage": "sampled",
+                "scheduler_state": "sampled",
+                "kernel_timing": "unavailable",
+            }
+        elif source == "ollama":
+            engine_metrics["capabilities"] = {
+                "kv_cache_usage": "estimated",
+                "scheduler_state": "unavailable",
+                "kernel_timing": "unavailable",
+            }
 
     normalized_events = [
         {
@@ -75,6 +91,9 @@ def compact_trace(path: Path) -> dict[str, Any]:
         decode_rate = 1000 / mean_decode if mean_decode else 0
     model_name = metadata.get("model", metadata.get("model_class", "Unknown model"))
     short_model = str(model_name).split("/")[-1]
+    runtime_events = payload.get("runtime_events") or [
+        event.to_dict() for event in runtime_events_from_metrics(engine_metrics)
+    ]
 
     return {
         "id": path.stem,
@@ -93,6 +112,9 @@ def compact_trace(path: Path) -> dict[str, Any]:
         "totalLayerMs": round(total_layer_ms, 3),
         "timingScope": metadata.get("step_timing_scope", "model_forward"),
         "engineMetrics": engine_metrics,
+        "runtimeEvents": runtime_events,
+        "overview": aggregate_event_grid(normalized_events),
+        "insights": diagnose_trace(normalized_events, normalized_steps, engine_metrics),
         "steps": normalized_steps,
         "events": normalized_events,
     }

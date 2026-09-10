@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import platform
+import re
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -11,7 +12,10 @@ from pathlib import Path
 from typing import Any
 
 
-TRACE_SCHEMA_VERSION = "1.1"
+TRACE_SCHEMA_VERSION = "1.2"
+_RUNTIME_LABEL = re.compile(r"^[a-z][a-z0-9_]*$")
+_REQUEST_REF = re.compile(r"^request-\d+$")
+_BATCH_REF = re.compile(r"^batch-\d+$")
 
 
 @dataclass
@@ -73,12 +77,48 @@ class TokenEvent:
 
 
 @dataclass
+class RuntimeEvent:
+    """Engine-neutral sampled or discrete runtime state on the trace time axis."""
+
+    sequence: int
+    elapsed_ns: int
+    category: str
+    name: str
+    value: float
+    unit: str
+    measurement: str = "sampled"
+    request_ref: str | None = None
+    batch_ref: str | None = None
+    attributes: dict[str, float | int | bool] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        for label in (self.category, self.name, self.unit):
+            if not _RUNTIME_LABEL.fullmatch(label):
+                raise ValueError("runtime event labels must be lowercase identifiers")
+        if self.measurement not in {"exact", "sampled", "estimated"}:
+            raise ValueError("runtime event measurement must be exact, sampled, or estimated")
+        if self.request_ref is not None and not _REQUEST_REF.fullmatch(self.request_ref):
+            raise ValueError("request_ref must be a trace-local value such as request-0")
+        if self.batch_ref is not None and not _BATCH_REF.fullmatch(self.batch_ref):
+            raise ValueError("batch_ref must be a trace-local value such as batch-0")
+        for key, value in self.attributes.items():
+            if not _RUNTIME_LABEL.fullmatch(key) or not isinstance(value, (int, float, bool)):
+                raise ValueError("runtime event attributes must be named numeric or boolean values")
+
+    def to_dict(self) -> dict[str, Any]:
+        row = asdict(self)
+        row["elapsed_ms"] = self.elapsed_ns / 1_000_000
+        return row
+
+
+@dataclass
 class InferenceTrace:
     metadata: dict[str, Any]
     events: list[LayerEvent]
     steps: list[StepEvent] = field(default_factory=list)
     tokens: list[TokenEvent] = field(default_factory=list)
     metrics: dict[str, Any] = field(default_factory=dict)
+    runtime_events: list[RuntimeEvent] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
@@ -89,6 +129,7 @@ class InferenceTrace:
             "tokens": [token.to_dict() for token in self.tokens],
             "events": [event.to_dict() for event in self.events],
             "metrics": self.metrics,
+            "runtime_events": [event.to_dict() for event in self.runtime_events],
             "errors": self.errors,
         }
 

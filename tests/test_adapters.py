@@ -7,6 +7,7 @@ from layer_profiler.adapters import AdapterRegistry, CaptureRequest, parse_optio
 
 class DemoAdapter:
     name = "demo"
+    capabilities = {"layer_timing": "exact"}
 
     def __init__(self):
         self.request = None
@@ -30,6 +31,10 @@ def test_registry_dispatches_a_runtime_neutral_capture_request(tmp_path):
     assert registry.names() == ("demo",)
     assert registry.capture("DEMO", request) == tmp_path / "trace.json"
     assert adapter.request is request
+    assert registry.describe("demo") == {
+        "name": "demo",
+        "capabilities": {"layer_timing": "exact"},
+    }
 
 
 def test_registry_rejects_invalid_and_duplicate_adapters():

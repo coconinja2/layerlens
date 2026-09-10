@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from .adapters import CaptureRequest, adapter_registry, parse_option
@@ -13,6 +14,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Capture an LLM benchmark through a LayerLens runtime adapter"
     )
     parser.add_argument("--list-runtimes", action="store_true")
+    parser.add_argument("--describe-runtime", metavar="NAME")
     parser.add_argument("--runtime", help="Built-in or installed adapter name")
     parser.add_argument("--model")
     parser.add_argument("--prompt")
@@ -38,6 +40,12 @@ def main() -> None:
     args = parser.parse_args()
     if args.list_runtimes:
         print("\n".join(adapter_registry.names()))
+        return
+    if args.describe_runtime:
+        try:
+            print(json.dumps(adapter_registry.describe(args.describe_runtime), indent=2))
+        except LookupError as error:
+            parser.exit(2, f"LayerLens: {error}\n")
         return
     if not args.runtime or not args.model or args.prompt is None:
         parser.error("--runtime, --model, and --prompt are required for capture")

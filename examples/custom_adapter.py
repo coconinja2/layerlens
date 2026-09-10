@@ -18,6 +18,12 @@ class ExampleHTTPAdapter:
     """Adapt an example JSON generation endpoint to the LayerLens schema."""
 
     name = "example-http"
+    capabilities = {
+        "layer_timing": "unavailable",
+        "kv_cache_usage": "unavailable",
+        "scheduler_state": "unavailable",
+        "kernel_timing": "unavailable",
+    }
 
     def capture(self, request: CaptureRequest) -> Path:
         base_url = str(request.options.get("base_url", "http://localhost:9000"))
@@ -57,6 +63,7 @@ class ExampleHTTPAdapter:
                 "generated_tokens": generated_tokens,
                 "content_recorded": request.include_content,
                 "step_timing_scope": "runtime_aggregate",
+                "collector_capabilities": self.capabilities,
             }
         )
         if request.include_content:

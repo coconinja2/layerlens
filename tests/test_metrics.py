@@ -1,4 +1,8 @@
-from layer_profiler.metrics import parse_prometheus, summarize_vllm_metrics
+from layer_profiler.metrics import (
+    parse_prometheus,
+    runtime_events_from_metrics,
+    summarize_vllm_metrics,
+)
 
 
 BEFORE = """
@@ -55,6 +59,9 @@ def test_prometheus_metrics_are_normalized_and_labels_are_allowlisted():
         "kv_cache_size_tokens": "4096",
     }
     assert "served_model_name" not in metrics["cache"]["config"]
+    events = runtime_events_from_metrics(metrics)
+    assert {event.category for event in events} == {"kv_cache", "scheduler"}
+    assert all(event.measurement == "sampled" for event in events)
 
 
 def test_parser_ignores_comments_invalid_values_and_unescapes_labels():

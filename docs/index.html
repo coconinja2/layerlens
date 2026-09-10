@@ -129,6 +129,16 @@
     .legend { display: flex; gap: 15px; color: var(--muted); font: 400 10px var(--mono); }
     .legend span { display: flex; align-items: center; gap: 5px; }
     .legend i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+    .resolution { display: flex; align-items: center; gap: 8px; }
+    .resolution select { padding: 6px 28px 6px 8px; font-size: 10px; }
+    .decision-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1px; background: var(--border); }
+    .decision { padding: 22px; background: var(--panel-2); }
+    .decision:last-child:nth-child(odd) { grid-column: 1 / -1; }
+    .decision-kind { color: var(--cyan); font: 500 9px var(--mono); text-transform: uppercase; letter-spacing: .1em; }
+    .decision h3 { margin: 10px 0 7px; font-size: 14px; }
+    .decision .evidence { color: var(--text); font: 400 10px/1.6 var(--mono); }
+    .decision p { margin: 9px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+    .selection-guide { padding: 10px 12px; margin-top: 10px; border-left: 2px solid var(--violet); color: var(--muted); background: rgba(155, 135, 255, .05); font: 400 10px/1.6 var(--mono); }
     .plot { width: 100%; height: 470px; }
     #step-chart { height: 470px; }
     #timeline { height: 650px; }
@@ -172,6 +182,8 @@
       .metric { border-bottom: 1px solid var(--border); }
       .chart-grid { grid-template-columns: 1fr; }
       .chart-panel, .chart-panel:nth-child(2n) { border-right: 0; }
+      .decision-grid { grid-template-columns: 1fr; }
+      .decision:last-child:nth-child(odd) { grid-column: auto; }
       .integrate { grid-template-columns: 1fr; }
       .explain { grid-template-columns: 1fr; }
     }
@@ -197,7 +209,7 @@
     <div class="brand"><span class="brand-mark">LL</span> LayerLens</div>
     <div class="nav-links">
       <a href="#explorer">Explorer</a>
-      <a href="#method">Method</a>
+      <a href="#decisions">Decisions</a>
       <a href="#integrate">Integrate</a>
       <a class="github-link" href="https://github.com/coconinja2/layerlens">View source ↗</a>
     </div>
@@ -236,7 +248,7 @@
         </div>
       </div>
       <div class="code-card">
-        <div class="code-title"><span>Runtime-neutral capture</span><span>LayerLens 0.4</span></div>
+        <div class="code-title"><span>Runtime-neutral capture</span><span>LayerLens 0.5</span></div>
         <pre><span class="cyan">$</span> layerlens-capture --list-runtimes
 ollama
 vllm
@@ -255,11 +267,11 @@ my-runtime
       <article><span class="number">02 / ATTRIBUTE</span><h3>Separate prefill from decode</h3><p>Step zero represents prompt prefill and first-token latency. Every following step isolates one KV-cache decode pass.</p></article>
       <article><span class="number">03 / COMPARE</span><h3>Benchmark the same way</h3><p>Portable JSON traces make model, runtime, hardware, and configuration comparisons reproducible and easy to share.</p></article>
     </section>
-    <footer><span>LAYERLENS · TRACE SCHEMA 1.1</span><span>BUILT FOR REPRODUCIBLE INFERENCE ANALYSIS</span></footer>
+    <footer><span>LAYERLENS · TRACE SCHEMA 1.2</span><span>BUILT FOR REPRODUCIBLE INFERENCE ANALYSIS</span></footer>
   </main>
 
   <script>
-    const COLORS = { cyan: '#49d7ff', violet: '#9b87ff', amber: '#ffbd5b', green: '#4ee3a0', muted: '#8d9ab4', text: '#f1f5ff', grid: 'rgba(159,177,215,.10)', panel: '#0b1120' };
+    const COLORS = { cyan: '#49d7ff', violet: '#9b87ff', amber: '#ffbd5b', green: '#4ee3a0', danger: '#ff6c8b', muted: '#8d9ab4', text: '#f1f5ff', grid: 'rgba(159,177,215,.10)', panel: '#0b1120' };
     const plotConfig = {displayModeBar: false, responsive: true, scrollZoom: false};
     let runs = [];
 
@@ -287,15 +299,24 @@ my-runtime
           <div class="metric"><div class="metric-label">Request wall time</div><div class="metric-value">${fmt(run.requestMs)}</div><div class="metric-note">CLIENT OBSERVED</div></div>
         </div>
         <div class="chart-grid">
+          ${decisionPanel(run)}
           ${layerPanels(run)}
           ${enginePanel(run)}
           <section class="chart-panel full"><div class="panel-head"><div><h2>Cross-model benchmark comparison</h2><div class="panel-kicker">Runtime-native phases · compare prompt/prefill and output/decode directionally</div></div></div><div id="benchmark" class="plot"></div></section>
         </div>`;
     }
 
+    function decisionPanel(run) {
+      const insights = run.insights || [];
+      if (!insights.length) return '';
+      return `<section class="chart-panel full" id="decisions"><div class="panel-head"><div><h2>What should I do with this trace?</h2><div class="panel-kicker">Evidence first · recommended next measurement or configuration experiment</div></div></div>
+        <div class="decision-grid">${insights.map(insight => `<article class="decision"><div class="decision-kind">${insight.kind}</div><h3>${insight.title}</h3><div class="evidence">${insight.evidence}</div><p>${insight.action}</p></article>`).join('')}</div>
+      </section>`;
+    }
+
     function layerPanels(run) {
       if (!run.events.length) return '';
-      return `<section class="chart-panel"><div class="panel-head"><div><h2>Layer × token heatmap</h2><div class="panel-kicker">Color = execution duration · hover for exact values</div></div><div class="legend"><span><i style="background:${COLORS.cyan}"></i>Prefill</span><span><i style="background:${COLORS.violet}"></i>Decode</span></div></div><div id="heatmap" class="plot"></div></section>
+      return `<section class="chart-panel"><div class="panel-head"><div><h2>Layer × token heatmap</h2><div class="panel-kicker">Auto-binned for large traces · max preserves isolated spikes</div></div><div class="resolution"><label for="resolution-select">Detail</label><select id="resolution-select"><option value="auto">Auto</option><option value="1">Exact</option><option value="2">2 × 2</option><option value="4">4 × 4</option><option value="8">8 × 8</option></select></div></div><div id="heatmap" class="plot"></div><div class="selection-guide" id="selection-guide">Click a cell to turn the timing signal into a concrete next debugging step.</div></section>
         <section class="chart-panel"><div class="panel-head"><div><h2>Token-step latency</h2><div class="panel-kicker">Prefill vs. sequential decode passes</div></div></div><div id="step-chart" class="plot"></div></section>
         <section class="chart-panel full"><div class="panel-head"><div><h2>Execution timeline — what layer was running when</h2><div class="panel-kicker">Absolute time since capture start · each bar is one decoder-layer call</div></div></div><div id="timeline" class="plot"></div></section>`;
     }
@@ -319,13 +340,20 @@ my-runtime
             <div class="engine-stat"><b>${runtime.quantization || 'N/A'}</b><span>Quantization</span></div>
           </div><div id="kv-chart" class="plot"></div></section>`;
       }
+      if (metrics.source !== 'vllm_prometheus') {
+        const capabilities = metrics.capabilities || {};
+        const entries = Object.entries(capabilities);
+        return `<section class="chart-panel full"><div class="panel-head"><div><h2>Runtime telemetry</h2><div class="panel-kicker">Normalized by the installed runtime adapter</div></div></div>
+          <div class="engine-stats">${entries.map(([name,value])=>`<div class="engine-stat"><b>${value}</b><span>${name.replaceAll('_',' ')}</span></div>`).join('')}</div>
+        </section>`;
+      }
       const cache = metrics.cache || {};
       const scheduler = metrics.scheduler || {};
       const processMetrics = metrics.process || {};
       const latency = metrics.latency_ms || {};
       const hitRate = cache.prefix_hit_rate == null ? 'N/A' : `${(cache.prefix_hit_rate * 100).toFixed(1)}%`;
       const ttft = latency.time_to_first_token_mean_ms == null ? 'N/A' : fmt(latency.time_to_first_token_mean_ms);
-      return `<section class="chart-panel full"><div class="panel-head"><div><h2>vLLM engine & KV-cache telemetry</h2><div class="panel-kicker">Request-scoped deltas from Prometheus · endpoint labels discarded</div></div></div>
+      return `<section class="chart-panel full"><div class="panel-head"><div><h2>Runtime correlation — KV cache + scheduler</h2><div class="panel-kicker">Engine-neutral event contract · this collector uses sanitized vLLM Prometheus samples</div></div></div>
         <div class="engine-stats">
           <div class="engine-stat"><b>${(100 * (cache.peak_usage || 0)).toFixed(2)}%</b><span>Peak KV-cache use</span></div>
           <div class="engine-stat"><b>${hitRate}</b><span>Prefix-cache hit rate</span></div>
@@ -336,16 +364,72 @@ my-runtime
         </div><div id="kv-chart" class="plot"></div></section>`;
     }
 
-    function renderHeatmap(run) {
-      const layers = [...new Set(run.events.map(e => e.layer))].sort((a,b) => b-a);
-      const steps = run.steps.map(s => s.step);
-      const byCell = new Map(run.events.map(e => [`${e.layer}:${e.step}`, e.durationMs]));
-      const z = layers.map(layer => steps.map(step => byCell.get(`${layer}:${step}`) || 0));
-      Plotly.newPlot('heatmap', [{type:'heatmap', x: run.steps.map(stepLabel), y: layers.map(layerLabel), z,
+    function groupSize(count, target) {
+      let size = 1;
+      while (Math.ceil(count / size) > target) size *= 2;
+      return size;
+    }
+
+    function aggregateGrid(run, requested) {
+      const layers = [...new Set(run.events.map(event => event.layer))];
+      const decodeSteps = [...new Set(run.events.filter(event => event.phase !== 'prefill').map(event => event.step))];
+      const layerSize = requested === 'auto' ? groupSize(layers.length, 48) : Number(requested);
+      const tokenSize = requested === 'auto' ? groupSize(decodeSteps.length, 64) : Number(requested);
+      const groups = new Map();
+      run.events.forEach(event => {
+        const layerStart = Math.floor(event.layer / layerSize) * layerSize;
+        const stepStart = event.phase === 'prefill' ? 0 : 1 + Math.floor((Math.max(1,event.step)-1) / tokenSize) * tokenSize;
+        const key = `${layerStart}:${stepStart}:${event.phase}`;
+        if (!groups.has(key)) groups.set(key,{layerStart,stepStart,phase:event.phase,values:[],starts:[],ends:[]});
+        const group=groups.get(key);
+        group.values.push(event.durationMs);
+        group.starts.push(event.startMs);
+        group.ends.push(event.startMs+event.durationMs);
+      });
+      const cells = [...groups.values()].map(group => {
+        const values = group.values.slice().sort((a,b)=>a-b);
+        const layerEnd = group.layerStart + layerSize - 1;
+        const stepEnd = group.phase === 'prefill' ? 0 : group.stepStart + tokenSize - 1;
+        const mean = values.reduce((sum,value)=>sum+value,0) / values.length;
+        const p95 = values[Math.min(values.length-1,Math.ceil(values.length*.95)-1)];
+        return {...group,layerEnd,stepEnd,mean,p95,max:values[values.length-1],count:values.length,
+          startMs:Math.min(...group.starts),durationMs:Math.max(...group.ends)-Math.min(...group.starts),step:group.stepStart,
+          layerLabel:layerSize===1?layerLabel(group.layerStart):`Layers ${group.layerStart}–${layerEnd}`,
+          tokenLabel:group.phase==='prefill'?'P0 · Prefill':tokenSize===1?`D${group.stepStart} · Decode`:`D${group.stepStart}–D${stepEnd}`};
+      });
+      return {cells,layerSize,tokenSize};
+    }
+
+    function renderHeatmap(run, requested='auto') {
+      const view = aggregateGrid(run,requested);
+      const layers = [...new Set(view.cells.map(cell=>cell.layerLabel))].sort((a,b)=>{
+        const av=view.cells.find(cell=>cell.layerLabel===a).layerStart;
+        const bv=view.cells.find(cell=>cell.layerLabel===b).layerStart;
+        return bv-av;
+      });
+      const tokens = [...new Set(view.cells.map(cell=>cell.tokenLabel))].sort((a,b)=>{
+        const av=view.cells.find(cell=>cell.tokenLabel===a).stepStart;
+        const bv=view.cells.find(cell=>cell.tokenLabel===b).stepStart;
+        return av-bv;
+      });
+      const byCell = new Map(view.cells.map(cell=>[`${cell.layerLabel}:${cell.tokenLabel}`,cell]));
+      const z = layers.map(layer => tokens.map(token => byCell.get(`${layer}:${token}`)?.max || 0));
+      const customdata = layers.map(layer => tokens.map(token => {
+        const cell=byCell.get(`${layer}:${token}`); return cell?[cell.layerLabel,cell.tokenLabel,cell.mean,cell.p95,cell.max,cell.count]:[layer,token,0,0,0,0];
+      }));
+      Plotly.newPlot('heatmap', [{type:'heatmap', x: tokens, y: layers, z, customdata,
         colorscale: [[0,'#0d1730'],[.18,'#143c5a'],[.42,'#176e82'],[.68,'#3cb6b2'],[1,'#ffe08a']],
         colorbar:{title:{text:'ms',side:'top'}, thickness:8, len:.72, outlinewidth:0, tickfont:{size:9}},
-        hovertemplate:'%{y}<br>%{x}<br><b>%{z:.3f} ms</b><extra></extra>'}],
+        hovertemplate:'%{customdata[0]}<br>%{customdata[1]}<br>max <b>%{customdata[4]:.3f} ms</b><br>mean %{customdata[2]:.3f} · p95 %{customdata[3]:.3f}<br>%{customdata[5]} raw events<extra></extra>'}],
         {...baseLayout, margin:{l:72,r:45,t:12,b:52}, xaxis:{...baseLayout.xaxis, title:'Generation step'}, yaxis:{...baseLayout.yaxis, title:'Decoder layer', dtick:2}}, plotConfig);
+      document.getElementById('heatmap').on('plotly_click', event => {
+        const cell=event.points[0].customdata;
+        const guide=document.getElementById('selection-guide');
+        const variability=cell[2] ? cell[4]/cell[2] : 0;
+        guide.textContent = variability >= 1.8
+          ? `${cell[0]} · ${cell[1]} peaks at ${cell[4].toFixed(2)} ms (${variability.toFixed(1)}× its mean). Inspect this token's shapes and attention/MLP kernels; compare the same cell in a second run.`
+          : `${cell[0]} · ${cell[1]} is consistently costly (mean ${cell[2].toFixed(2)} ms, p95 ${cell[3].toFixed(2)} ms). Test an optimized kernel or quantization and compare cumulative time.`;
+      });
     }
 
     function renderSteps(run) {
@@ -356,14 +440,16 @@ my-runtime
         {...baseLayout, margin:{l:58,r:15,t:28,b:52}, bargap:.28, xaxis:{...baseLayout.xaxis, title:'Generation step'}, yaxis:{...baseLayout.yaxis, title:'Latency (ms)', rangemode:'tozero'}}, plotConfig);
     }
 
-    function renderTimeline(run) {
-      const prefill = run.events.filter(e => e.phase === 'prefill');
-      const decode = run.events.filter(e => e.phase === 'decode');
-      const trace = (rows, name, color) => ({type:'bar', orientation:'h', name, y:rows.map(e=>layerLabel(e.layer)), x:rows.map(e=>e.durationMs), base:rows.map(e=>e.startMs), marker:{color, line:{color:'rgba(255,255,255,.18)',width:.5}}, width:.64,
-        customdata:rows.map(e=>[e.step,e.startMs,e.startMs+e.durationMs,e.durationMs]),
-        hovertemplate:'%{y} · step %{customdata[0]}<br>start <b>%{customdata[1]:.3f} ms</b><br>end %{customdata[2]:.3f} ms<br>duration %{customdata[3]:.3f} ms<extra></extra>'});
+    function renderTimeline(run, requested='auto') {
+      const view = aggregateGrid(run,requested);
+      const rows = view.cells;
+      const prefill = rows.filter(e => e.phase === 'prefill');
+      const decode = rows.filter(e => e.phase === 'decode');
+      const trace = (items, name, color) => ({type:'bar', orientation:'h', name, y:items.map(e=>e.layerLabel), x:items.map(e=>e.durationMs), base:items.map(e=>e.startMs), marker:{color, line:{color:'rgba(255,255,255,.18)',width:.5}}, width:.64,
+        customdata:items.map(e=>[e.step,e.startMs,e.startMs+e.durationMs,e.durationMs,e.count]),
+        hovertemplate:'%{y} · step %{customdata[0]}<br>start <b>%{customdata[1]:.3f} ms</b><br>end %{customdata[2]:.3f} ms<br>span %{customdata[3]:.3f} ms<br>%{customdata[4]} raw events<extra></extra>'});
       Plotly.newPlot('timeline', [trace(prefill,'Prefill',COLORS.cyan),trace(decode,'Decode',COLORS.violet)],
-        {...baseLayout, barmode:'overlay', showlegend:false, margin:{l:72,r:14,t:12,b:58}, xaxis:{...baseLayout.xaxis,title:'Time since capture start (ms)'}, yaxis:{...baseLayout.yaxis,title:'Decoder layer', categoryorder:'array', categoryarray:[...Array(run.layerCount).keys()].reverse().map(layerLabel)}}, plotConfig);
+        {...baseLayout, barmode:'overlay', showlegend:false, margin:{l:72,r:14,t:12,b:58}, xaxis:{...baseLayout.xaxis,title:'Time since capture start (ms)'}, yaxis:{...baseLayout.yaxis,title:'Decoder layer/group', categoryorder:'array', categoryarray:[...new Set(rows.map(row=>row.layerLabel))].reverse()}}, plotConfig);
     }
 
     function renderEngineMetrics(run) {
@@ -377,10 +463,15 @@ my-runtime
           {...baseLayout,margin:{l:66,r:20,t:38,b:52},xaxis:{...baseLayout.xaxis,title:'Ollama runtime phase'},yaxis:{...baseLayout.yaxis,title:'Duration (ms)',rangemode:'tozero'}},plotConfig);
         return;
       }
-      const points = metrics.timeline || [];
+      if (!run.runtimeEvents?.length) return;
+      const points = run.runtimeEvents || [];
+      const cachePoints = points.filter(point=>point.category==='kv_cache'&&point.name==='usage');
+      const runningPoints = points.filter(point=>point.category==='scheduler'&&point.name==='running');
+      const waitingPoints = points.filter(point=>point.category==='scheduler'&&point.name==='waiting');
       Plotly.newPlot('kv-chart', [
-        {type:'scatter',mode:'lines',name:'KV-cache usage',x:points.map(p=>p.elapsed_ms),y:points.map(p=>100*p.kv_cache_usage),line:{color:COLORS.green,width:2},fill:'tozeroy',fillcolor:'rgba(78,227,160,.08)',hovertemplate:'%{x:.1f} ms<br>KV cache <b>%{y:.3f}%</b><extra></extra>'},
-        {type:'scatter',mode:'lines',name:'Running requests',x:points.map(p=>p.elapsed_ms),y:points.map(p=>p.requests_running),line:{color:COLORS.amber,width:2,shape:'hv'},yaxis:'y2',hovertemplate:'%{x:.1f} ms<br>Running <b>%{y}</b><extra></extra>'}
+        {type:'scatter',mode:'lines',name:'KV-cache usage',x:cachePoints.map(p=>p.elapsed_ms),y:cachePoints.map(p=>100*p.value),line:{color:COLORS.green,width:2},fill:'tozeroy',fillcolor:'rgba(78,227,160,.08)',hovertemplate:'%{x:.1f} ms<br>KV cache <b>%{y:.3f}%</b><extra></extra>'},
+        {type:'scatter',mode:'lines',name:'Running requests',x:runningPoints.map(p=>p.elapsed_ms),y:runningPoints.map(p=>p.value),line:{color:COLORS.amber,width:2,shape:'hv'},yaxis:'y2',hovertemplate:'%{x:.1f} ms<br>Running <b>%{y}</b><extra></extra>'},
+        {type:'scatter',mode:'lines',name:'Waiting requests',x:waitingPoints.map(p=>p.elapsed_ms),y:waitingPoints.map(p=>p.value),line:{color:COLORS.danger,width:1.5,shape:'hv'},yaxis:'y2',hovertemplate:'%{x:.1f} ms<br>Waiting <b>%{y}</b><extra></extra>'}
       ], {...baseLayout,margin:{l:66,r:64,t:36,b:52},legend:{orientation:'h',x:0,y:1.15,font:{color:COLORS.muted}},xaxis:{...baseLayout.xaxis,title:'Request elapsed time (ms)'},yaxis:{...baseLayout.yaxis,title:'KV-cache usage (%)',rangemode:'tozero'},yaxis2:{title:'Running requests',overlaying:'y',side:'right',rangemode:'tozero',gridcolor:'rgba(0,0,0,0)',tickfont:{color:COLORS.muted}}},plotConfig);
     }
 
@@ -396,7 +487,12 @@ my-runtime
       const run = runs[index];
       document.getElementById('dashboard').innerHTML = shell(run);
       document.getElementById('run-meta').textContent = `${run.model} · ${run.backend} · ${run.promptTokens} prompt tokens · ${run.tokenCount} generated`;
-      if (run.events.length) { renderHeatmap(run); renderSteps(run); renderTimeline(run); }
+      if (run.events.length) {
+        renderHeatmap(run); renderSteps(run); renderTimeline(run);
+        document.getElementById('resolution-select').addEventListener('change', event => {
+          renderHeatmap(run,event.target.value); renderTimeline(run,event.target.value);
+        });
+      }
       renderEngineMetrics(run); renderBenchmark();
     }
 

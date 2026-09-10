@@ -9,7 +9,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from .metrics import VLLMMetricsSampler
+from .metrics import VLLMMetricsSampler, runtime_events_from_metrics
 from .privacy import safe_model_identifier
 from .trace import InferenceTrace, LayerEvent, StepEvent, TokenEvent, environment_metadata
 
@@ -83,7 +83,14 @@ def capture_vllm(
             "Check the injection mount and LLM_LAYER_CLASS_PATTERN."
         )
 
-    origin_ns = min((row["started_ns"] for row in rows), default=0)
+    first_event_ns = min((row["started_ns"] for row in rows), default=0)
+    request_origin_ns = int(started * 1_000_000_000)
+    clocks_align = bool(
+        rows
+        and request_origin_ns <= first_event_ns
+        and first_event_ns - request_origin_ns <= (elapsed_s + 5) * 1_000_000_000
+    )
+    origin_ns = request_origin_ns if clocks_align else first_event_ns
     events = [
         LayerEvent(
             sequence=index,
@@ -145,6 +152,15 @@ def capture_vllm(
             "step_timing_scope": "decoder_layer_span" if layer_events else "not_recorded",
             "content_recorded": include_content,
             "server_metrics_collected": bool(server_metrics.get("available", False)),
+            "runtime_time_alignment": (
+                "request_start" if clocks_align else "first_layer_fallback"
+            ),
+            "collector_capabilities": {
+                "layer_timing": "exact" if layer_events else "unavailable",
+                "kv_cache_usage": "sampled" if server_metrics.get("available") else "unavailable",
+                "scheduler_state": "sampled" if server_metrics.get("available") else "unavailable",
+                "kernel_timing": "unavailable",
+            },
         }
     )
     if include_content:
@@ -156,4 +172,5 @@ def capture_vllm(
         steps=steps,
         tokens=tokens,
         metrics=server_metrics,
+        runtime_events=runtime_events_from_metrics(server_metrics),
     ).write(output_path)

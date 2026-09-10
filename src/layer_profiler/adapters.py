@@ -50,6 +50,7 @@ class RuntimeAdapter(Protocol):
     """Contract implemented by built-in and third-party runtime adapters."""
 
     name: str
+    capabilities: Mapping[str, str]
 
     def capture(self, request: CaptureRequest) -> Path:
         """Capture one request and return the written LayerLens trace path."""
@@ -101,6 +102,13 @@ class AdapterRegistry:
     def capture(self, name: str, request: CaptureRequest) -> Path:
         return self.get(name).capture(request)
 
+    def describe(self, name: str) -> dict[str, Any]:
+        adapter = self.get(name)
+        return {
+            "name": name.strip().lower(),
+            "capabilities": dict(getattr(adapter, "capabilities", {})),
+        }
+
     @staticmethod
     def _instantiate(candidate: Any) -> RuntimeAdapter:
         if isinstance(candidate, type):
@@ -127,6 +135,12 @@ class OllamaAdapter:
     """Built-in adapter for local or cloud Ollama-compatible APIs."""
 
     name = "ollama"
+    capabilities = {
+        "layer_timing": "unavailable",
+        "kv_cache_usage": "estimated",
+        "scheduler_state": "unavailable",
+        "kernel_timing": "unavailable",
+    }
 
     def capture(self, request: CaptureRequest) -> Path:
         api_key = os.environ.get("OLLAMA_API_KEY")
@@ -148,6 +162,12 @@ class VLLMAdapter:
     """Built-in adapter for standard or instrumented vLLM servers."""
 
     name = "vllm"
+    capabilities = {
+        "layer_timing": "exact",
+        "kv_cache_usage": "sampled",
+        "scheduler_state": "sampled",
+        "kernel_timing": "unavailable",
+    }
 
     def capture(self, request: CaptureRequest) -> Path:
         api_key = os.environ.get("VLLM_API_KEY")

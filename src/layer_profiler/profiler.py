@@ -188,6 +188,12 @@ class LayerProfiler:
                 "module_pattern": self.config.module_pattern,
                 "leaf_modules": self.config.leaf_modules,
                 "device_synchronization": self.config.synchronize_device,
+                "collector_capabilities": {
+                    "layer_timing": "exact",
+                    "kv_cache_usage": "unavailable",
+                    "scheduler_state": "unavailable",
+                    "kernel_timing": "unavailable",
+                },
             }
         )
         info.update(metadata)

@@ -103,6 +103,11 @@ def normalize_ollama_metrics(
     return {
         "available": True,
         "source": "ollama_api",
+        "capabilities": {
+            "kv_cache_usage": "estimated",
+            "scheduler_state": "unavailable",
+            "kernel_timing": "unavailable",
+        },
         "counters": {
             "prompt_tokens": prompt_tokens,
             "generation_tokens": generation_tokens,
@@ -203,6 +208,12 @@ def capture_ollama(
             "step_timing_scope": "ollama_aggregate",
             "content_recorded": include_content,
             "server_metrics_collected": True,
+            "collector_capabilities": {
+                "layer_timing": "unavailable",
+                "kv_cache_usage": "estimated",
+                "scheduler_state": "unavailable",
+                "kernel_timing": "unavailable",
+            },
         }
     )
     if include_content:

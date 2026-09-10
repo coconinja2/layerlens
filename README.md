@@ -60,11 +60,23 @@ not need to run continuously or in real time.
 ## What the visualization shows
 
 - **Layer × token heatmap:** which decoder layers dominate prefill and decode.
+- **Actionable diagnostics:** converts isolated and cumulative hotspots into the
+  next measurement or configuration experiment, with the supporting evidence.
+- **Automatic level of detail:** collapses large layer/token grids into bounded
+  bins while retaining count, mean, p95, maximum, and the original raw events.
 - **Execution timeline:** the exact start, end, and duration of every layer call.
 - **Token-step latency:** time-to-first-token separated from KV-cache decode cost.
 - **vLLM engine telemetry:** KV-cache pressure, prefix-cache effectiveness,
   request concurrency, queueing, preemptions, TTFT, and prefill/decode timing.
 - **Benchmark comparison:** comparable traces across models, runtimes, hardware, and generation windows.
+
+![LayerLens actionable hotspot diagnostics and scalable detail controls](docs/layerlens-actionable.png)
+
+The diagnostics deliberately recommend experiments rather than claiming a red
+cell is automatically a bug: an isolated spike leads to attention/MLP and shape
+inspection, repeated cumulative cost leads to kernel or quantization A/B tests,
+prefill dominance leads to prompt/prefix/chunked-prefill tests, and measured
+cache pressure or preemption leads to concurrency and cache-sizing experiments.
 
 ![LayerLens vLLM KV-cache and scheduler telemetry](docs/layerlens-kv-metrics.png)
 
@@ -278,9 +290,10 @@ See `examples/manual_generation.py` for a complete greedy KV-cache loop.
 
 Each trace includes privacy-safe model/environment metadata, whole forward
 steps, generated-token indices, layer events, tensor shapes, device, supported
-CUDA/MPS allocation deltas, and optional normalized vLLM engine metrics. Schema
-`1.1` adds the top-level `metrics` object while preserving the existing event
-format.
+CUDA/MPS allocation deltas, and optional normalized engine metrics. Schema
+`1.2` adds engine-neutral `runtime_events` for sampled or discrete KV-cache and
+scheduler state. Collectors declare unavailable capabilities instead of
+fabricating data; the original layer-event format remains compatible.
 
 ## Privacy defaults
 
@@ -307,5 +320,9 @@ from publishable artifacts.
   measurements.
 - vLLM continuous batching can mix multiple requests in one engine iteration.
   The included vLLM capture command intentionally sends one request at a time.
+- The schema and dashboard are engine-agnostic, but deep collectors are
+  engine-specific. vLLM currently supplies sampled cache/scheduler telemetry;
+  other adapters can emit the same `RuntimeEvent` contract when their runtimes
+  expose equivalent data.
 - Profiling is invasive by nature. Never treat these timings as unprofiled
   production throughput.

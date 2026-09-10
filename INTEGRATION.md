@@ -12,6 +12,7 @@ From a clone of this repository:
 ```bash
 poetry install --with dashboard,dev
 poetry run layerlens-capture --list-runtimes
+poetry run layerlens-capture --describe-runtime vllm
 ```
 
 Or install the standalone commands directly from GitHub:
@@ -24,6 +25,10 @@ layerlens-capture --list-runtimes
 The built-in adapter names are `ollama` and `vllm`. The specialized
 `layerlens`, `layerlens-ollama`, and `layerlens-vllm` commands remain available
 when runtime-specific flags are more convenient.
+
+`--describe-runtime` reports whether an adapter can provide exact, sampled,
+estimated, or unavailable layer, KV-cache, scheduler, and kernel data before a
+capture is started.
 
 Prompts and generated content are excluded from traces by default. Keep API
 keys in `OLLAMA_API_KEY`, `VLLM_API_KEY`, or your adapter's environment
@@ -107,6 +112,12 @@ from layer_profiler import CaptureRequest
 
 class MyRuntimeAdapter:
     name = "my-runtime"
+    capabilities = {
+        "layer_timing": "unavailable",
+        "kv_cache_usage": "sampled",
+        "scheduler_state": "sampled",
+        "kernel_timing": "unavailable",
+    }
 
     def capture(self, request: CaptureRequest) -> Path:
         # Call the runtime, normalize its response, build an InferenceTrace,
@@ -153,11 +164,36 @@ poetry run layerlens-capture \
 Entry points may reference an adapter instance, an adapter class with a
 zero-argument constructor, or a zero-argument factory returning an adapter.
 
+### Engine support model
+
+LayerLens is engine-agnostic at the trace and visualization layers, not at the
+collection boundary. Scheduler, KV-cache, and kernel implementations differ
+between vLLM, SGLang, TensorRT-LLM, llama.cpp, and other runtimes, so each
+adapter owns its version-specific collection code. It translates native data
+into the same categories:
+
+- `LayerEvent` for exact model-boundary execution;
+- `RuntimeEvent(category="kv_cache", ...)` for cache state;
+- `RuntimeEvent(category="scheduler", ...)` for running/waiting/batch state;
+- `RuntimeEvent(category="kernel", ...)` when a profiler can correlate kernels;
+- capability declarations when a measurement is exact, sampled, estimated, or
+  unavailable.
+
+`request_ref` and `batch_ref` are optional trace-local aliases for correlation.
+Adapters must generate neutral values such as `request-0` and `batch-3`; never
+copy provider request IDs, user identifiers, prompts, or scheduler labels into
+these fields.
+
+The dashboards consume only these normalized records. Adding deeper support
+for one engine therefore changes its adapter rather than requiring a dashboard
+or trace-backend rewrite.
+
 ## 5. Adapter requirements
 
 - Return the `Path` written to `request.output_path`.
 - Emit schema-compatible data with `InferenceTrace`, `LayerEvent`,
-  `StepEvent`, and `TokenEvent` rather than inventing a separate JSON format.
+  `StepEvent`, `TokenEvent`, and `RuntimeEvent` rather than inventing a separate
+  JSON format.
 - Use `safe_model_identifier()` before storing a model name that may be a local
   path.
 - Do not store endpoint URLs, headers, credentials, raw provider responses, or
@@ -166,6 +202,9 @@ zero-argument constructor, or a zero-argument factory returning an adapter.
   `request.include_content` is true.
 - Set `metrics.available`, `metrics.source`, and explicit measurement names so
   dashboards never confuse measured KV occupancy with an estimate.
+- Declare collector capabilities as `exact`, `sampled`, `estimated`, or
+  `unavailable`. Emit scheduler and KV data through engine-neutral
+  `RuntimeEvent` records; keep version-specific collection inside the adapter.
 - Leave `events` empty when a runtime exposes only aggregate metrics. Never
   fabricate layer timing.
 

@@ -10,6 +10,9 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
+from layer_profiler.analysis import aggregate_event_grid, diagnose_trace
+from layer_profiler.metrics import runtime_events_from_metrics
+
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 TRACE_DIR = PROJECT_ROOT / "traces"
@@ -49,6 +52,11 @@ steps = frame(payload, "steps")
 tokens = frame(payload, "tokens")
 metadata = payload.get("metadata", {})
 server_metrics = payload.get("metrics", {})
+runtime_event_rows = payload.get("runtime_events", [])
+if not runtime_event_rows and server_metrics.get("available"):
+    runtime_event_rows = [
+        event.to_dict() for event in runtime_events_from_metrics(server_metrics)
+    ]
 
 model_name = metadata.get("model", metadata.get("model_class", "Unknown model"))
 st.subheader(str(model_name))
@@ -89,7 +97,7 @@ if server_metrics.get("available"):
         st.caption("Ollama does not expose block-level KV occupancy; context utilization is an estimate.")
         with st.expander("Ollama metric details"):
             st.json(server_metrics)
-    else:
+    elif server_metrics.get("source") == "vllm_prometheus":
         st.subheader("vLLM engine & KV cache")
         scheduler = server_metrics.get("scheduler", {})
         process_metrics = server_metrics.get("process", {})
@@ -102,27 +110,47 @@ if server_metrics.get("available"):
         m4.metric("vLLM TTFT", f"{ttft:.2f} ms" if ttft is not None else "N/A")
         m5.metric("Peak server RSS", f"{process_metrics.get('peak_resident_memory_mb', 0):,.0f} MB")
 
-        metric_timeline = pd.DataFrame(server_metrics.get("timeline", []))
-        if not metric_timeline.empty:
-            engine_chart = go.Figure()
-            engine_chart.add_trace(
-                go.Scatter(x=metric_timeline["elapsed_ms"], y=metric_timeline["kv_cache_usage"] * 100, name="KV-cache usage", mode="lines", fill="tozeroy")
-            )
-            engine_chart.add_trace(
-                go.Scatter(x=metric_timeline["elapsed_ms"], y=metric_timeline["requests_running"], name="Running requests", mode="lines", yaxis="y2")
-            )
-            engine_chart.update_layout(
-                title="KV-cache pressure and scheduler activity during this request",
-                xaxis_title="Request elapsed time (ms)",
-                yaxis_title="KV-cache usage (%)",
-                yaxis2=dict(title="Requests", overlaying="y", side="right", rangemode="tozero"),
-                legend=dict(orientation="h"),
-            )
-            st.plotly_chart(engine_chart, use_container_width=True)
         with st.expander("Engine metric details"):
             st.json({"cache": cache, "scheduler": scheduler, "counters": counters, "latency_ms": latency})
+    else:
+        st.subheader("Runtime telemetry")
+        capabilities = server_metrics.get("capabilities", {})
+        if capabilities:
+            st.caption(
+                " · ".join(f"{name}: {measurement}" for name, measurement in capabilities.items())
+            )
+        st.json(server_metrics)
 elif server_metrics:
     st.info("This trace requested engine metrics, but the vLLM metrics endpoint was unavailable.")
+
+if runtime_event_rows:
+    runtime_events = pd.DataFrame(runtime_event_rows)
+    st.subheader("Runtime correlation timeline")
+    st.caption(
+        "Engine-neutral sampled events. Collectors declare unavailable capabilities rather than fabricating them."
+    )
+    engine_chart = go.Figure()
+    for (category, name), group in runtime_events.groupby(["category", "name"]):
+        values = group["value"] * 100 if group["unit"].iloc[0] == "ratio" else group["value"]
+        engine_chart.add_trace(
+            go.Scatter(
+                x=group["elapsed_ms"],
+                y=values,
+                name=f"{category}: {name}",
+                mode="lines",
+                line_shape="hv" if category == "scheduler" else "linear",
+                yaxis="y" if category == "kv_cache" else "y2",
+                fill="tozeroy" if category == "kv_cache" else None,
+            )
+        )
+    engine_chart.update_layout(
+        title="KV-cache and scheduler state on one request time axis",
+        xaxis_title="Request elapsed time (ms)",
+        yaxis=dict(title="KV-cache usage (%)", rangemode="tozero"),
+        yaxis2=dict(title="Requests", overlaying="y", side="right", rangemode="tozero"),
+        legend=dict(orientation="h"),
+    )
+    st.plotly_chart(engine_chart, use_container_width=True)
 
 if events.empty:
     if server_metrics.get("available"):
@@ -153,6 +181,9 @@ decode = steps[steps["phase"] == "decode"] if not steps.empty else pd.DataFrame(
 prefill_ms = prefill["duration_ms"].sum() if not prefill.empty else float("nan")
 mean_decode_ms = decode["duration_ms"].mean() if not decode.empty else float("nan")
 slowest = filtered.loc[filtered["duration_ms"].idxmax()]
+insights = diagnose_trace(
+    filtered.to_dict("records"), steps.to_dict("records"), server_metrics
+)
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("First token · prefill", f"{prefill_ms:,.2f} ms" if pd.notna(prefill_ms) else "N/A")
@@ -160,23 +191,54 @@ c2.metric("Later tokens · mean", f"{mean_decode_ms:,.2f} ms" if pd.notna(mean_d
 c3.metric("Recorded layer calls", f"{len(filtered):,}")
 c4.metric("Slowest layer call", f"{slowest['duration_ms']:,.2f} ms")
 
+st.subheader("What should I do with this trace?")
+for insight in insights:
+    with st.container(border=True):
+        st.markdown(f"**{insight['title']}**")
+        st.caption(insight["evidence"])
+        st.write(insight["action"])
+
 overview, token_tab, bottleneck_tab, details_tab = st.tabs(
     ["Layer heatmap", "Token timeline", "Bottlenecks", "Trace details"]
 )
 
 with overview:
-    filtered["layer_order"] = pd.to_numeric(
-        filtered["module"].str.extract(r"(\d+)$", expand=False), errors="coerce"
+    resolution = st.selectbox(
+        "Heatmap resolution",
+        ["Auto", "Exact", "2 layers × 2 tokens", "4 layers × 4 tokens", "8 layers × 8 tokens"],
+        help="Auto keeps the heatmap below 48 layer groups and 64 token groups.",
     )
-    module_order = (
-        filtered[["module", "layer_order"]]
+    statistic = st.selectbox(
+        "Aggregated cell value", ["mean", "p95", "max", "total"], index=2
+    )
+    if resolution == "Auto":
+        layer_group = token_group = None
+    elif resolution == "Exact":
+        layer_group = token_group = 1
+    else:
+        layer_group = token_group = int(resolution.split()[0])
+    grid = aggregate_event_grid(
+        filtered.to_dict("records"),
+        layer_group_size=layer_group,
+        token_group_size=token_group,
+    )
+    cells = pd.DataFrame(grid["cells"])
+    value_column = f"{statistic}_ms"
+    layer_order = (
+        cells[["layer_label", "layer_start"]]
         .drop_duplicates()
-        .sort_values(["layer_order", "module"], na_position="last")["module"]
+        .sort_values("layer_start", ascending=False)["layer_label"]
         .tolist()
     )
-    heat = filtered.pivot_table(
-        index="module", columns="step", values="duration_ms", aggfunc="sum", fill_value=0
-    ).reindex(module_order)
+    token_order = (
+        cells[["token_label", "step_start"]]
+        .drop_duplicates()
+        .sort_values("step_start")["token_label"]
+        .tolist()
+    )
+    heat = cells.pivot_table(
+        index="layer_label", columns="token_label", values=value_column, aggfunc="max", fill_value=0
+    ).reindex(index=layer_order, columns=token_order)
     heatmap = px.imshow(
         heat,
         aspect="auto",
@@ -184,12 +246,18 @@ with overview:
         labels={
             "x": "Forward step (0 = prefill / first token)",
             "y": "Model layer",
-            "color": "Duration (ms)",
+            "color": f"{statistic} duration (ms)",
         },
-        title="Layer duration by generation step",
+        title="Layer duration by generation step — click filters to drill down",
     )
     heatmap.update_layout(height=max(500, min(1200, len(heat.index) * 25)))
     st.plotly_chart(heatmap, use_container_width=True)
+    if grid["aggregated"]:
+        st.info(
+            f"Showing {grid['cell_count']:,} aggregate cells from {grid['raw_event_count']:,} raw events "
+            f"({grid['layer_group_size']} layers × {grid['token_group_size']} decode tokens per bin). "
+            "Use the phase/step filters or Exact resolution to recover individual events."
+        )
 
     selected_step = st.select_slider(
         "Inspect one forward step", options=step_options, value=step_options[0]

@@ -11,6 +11,8 @@ import urllib.request
 from dataclasses import dataclass, field
 from typing import Any
 
+from .trace import RuntimeEvent
+
 
 _SAMPLE_RE = re.compile(
     r"^(?P<name>[a-zA-Z_:][a-zA-Z0-9_:]*)(?:\{(?P<labels>.*)\})?\s+"
@@ -205,6 +207,11 @@ def summarize_vllm_metrics(
     return {
         "available": True,
         "source": "vllm_prometheus",
+        "capabilities": {
+            "kv_cache_usage": "sampled",
+            "scheduler_state": "sampled",
+            "kernel_timing": "unavailable",
+        },
         "sample_interval_ms": sample_interval_ms,
         "timeline": timeline,
         "cache": {
@@ -250,6 +257,33 @@ def summarize_vllm_metrics(
         "counters": counters,
         "latency_ms": latencies,
     }
+
+
+def runtime_events_from_metrics(metrics: dict[str, Any]) -> list[RuntimeEvent]:
+    """Convert a normalized runtime timeline into engine-neutral events."""
+    events: list[RuntimeEvent] = []
+    fields = (
+        ("kv_cache", "usage", "kv_cache_usage", "ratio"),
+        ("scheduler", "running", "requests_running", "requests"),
+        ("scheduler", "waiting", "requests_waiting", "requests"),
+    )
+    for point in metrics.get("timeline", []):
+        elapsed_ns = int(float(point.get("elapsed_ms", 0)) * 1_000_000)
+        for category, name, key, unit in fields:
+            if point.get(key) is None:
+                continue
+            events.append(
+                RuntimeEvent(
+                    sequence=len(events),
+                    elapsed_ns=elapsed_ns,
+                    category=category,
+                    name=name,
+                    value=float(point[key]),
+                    unit=unit,
+                    measurement="sampled",
+                )
+            )
+    return events
 
 
 class VLLMMetricsSampler:

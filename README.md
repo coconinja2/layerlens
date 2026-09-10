@@ -13,6 +13,32 @@
 LayerLens is an offline observability tool for answering a concrete inference question:
 **where does each generated token spend its time inside the model?**
 
+## Plug it into a runtime
+
+Use one command for built-in or externally installed adapters:
+
+```bash
+poetry install --with dashboard,dev
+poetry run layerlens-capture --list-runtimes
+poetry run layerlens-capture \
+  --runtime ollama \
+  --model gemma4:12b \
+  --prompt "Benchmark prompt" \
+  --output traces/run.json
+```
+
+For a standalone installation, use
+`python3 -m pip install "git+https://github.com/coconinja2/layerlens.git"` and
+run the same commands without the `poetry run` prefix.
+
+LayerLens ships with `ollama` and `vllm` adapters. A third-party package can
+add another runtime through the `layerlens.adapters` Python entry-point group;
+the generic CLI discovers it without a LayerLens source-code change.
+
+**[Read the complete integration guide →](INTEGRATION.md)** for vLLM,
+Ollama, Python embedding, adapter packaging, supported options, privacy rules,
+and a complete custom HTTP adapter template.
+
 It records every transformer layer during:
 
 - the prefill pass that produces the first token;
@@ -59,6 +85,11 @@ Model selection is runtime-driven rather than hard-coded. Hugging Face layer
 paths are discovered with a configurable regex, vLLM class matching is
 configurable through `LLM_LAYER_CLASS_PATTERN`, and Ollama accepts any locally
 installed or cloud-accessible model name.
+
+The public extension API consists of `CaptureRequest`, `RuntimeAdapter`,
+`AdapterRegistry`, `adapter_registry`, and `capture`. Existing specialized
+commands remain supported, so adoption does not require migrating working
+scripts.
 
 ## Measurement model
 

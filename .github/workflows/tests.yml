@@ -15,5 +15,6 @@ jobs:
       - uses: snok/install-poetry@v1
       - run: poetry install --with dev
       - run: poetry run pytest -q
+      - run: poetry run layerlens-capture --list-runtimes
       - run: poetry run python scripts/build_showcase.py --help
       - run: poetry run python scripts/privacy_audit.py

@@ -153,7 +153,10 @@ def capture_ollama(
     show_payload: dict[str, Any] = {}
     try:
         show_payload = _request_json(
-            f"{root}/api/show", body={"model": model, "verbose": False}, headers=request_headers
+            f"{root}/api/show",
+            body={"model": model, "verbose": False},
+            headers=request_headers,
+            timeout=timeout,
         )
     except Exception:
         pass

@@ -108,6 +108,30 @@ paths are discovered with a configurable regex, vLLM class matching is
 configurable through `LLM_LAYER_CLASS_PATTERN`, and Ollama accepts any locally
 installed or cloud-accessible model name.
 
+## Experimental exact matrix-product reuse
+
+`layerlens-product-atlas` investigates a new, non-KV reuse path. When sibling
+projections consume the same activation, it finds bit-identical stored weight
+values at each input coordinate, computes `activation[j] × weight_value` once,
+and routes that product into every matching output. It does not quantize
+weights or activations and never considers merely similar values reusable.
+
+```bash
+poetry run layerlens-product-atlas \
+  --model Qwen/Qwen3.5-0.8B \
+  --layer 0 \
+  --benchmark-iterations 20
+```
+
+On the first BF16 Qwen3.5 0.8B MLP gate/up pair, the exact dictionary reduces
+the scalar-multiplication count from 7.34M to 1.69M (76.97%). The inspectable
+CPU reference is still 9.54× slower than two optimized dense matvecs because
+index routing dominates. LayerLens therefore labels this a kernel research
+target, not a production speedup. See [the equations, measurements, privacy
+contract, and Qwen3.5 27B feasibility check](PRODUCT_ATLAS.md).
+
+![LayerLens Exact Product Atlas multiplication benchmark](docs/layerlens-product-atlas.png)
+
 ## Reduce repeated prefill computation
 
 `layerlens-cache-plan` simulates a bounded, full-block LRU prefix cache and

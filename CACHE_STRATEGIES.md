@@ -4,6 +4,22 @@ LayerLens separates exact optimizations from approximations that can change
 model quality. Timing similarity alone is never considered proof that an
 activation is reusable.
 
+## Implemented experiment: exact Product Atlas
+
+Product Atlas factors a family of projections that consume the same activation
+through dictionaries of bit-identical stored weight values. It shares each
+`activation coordinate × weight value` product across matching outputs and
+sibling projections. The optional in-memory coordinate cache preserves a
+product row only when the later activation value has exactly the same bits.
+
+This adds no quantization and is separate from attention/KV caching. The Qwen3.5
+0.8B MLP experiment removes 76.97% of scalar multiplications on paper, but the
+current reference executor is 9.54× slower because gathers and reductions are
+not fused. It is deliberately not wired into model inference until a native
+kernel wins on wall time, memory, numerical agreement, and task quality.
+
+See [PRODUCT_ATLAS.md](PRODUCT_ATLAS.md) for the equations and reproducible CLI.
+
 ## Implemented: exact prefix-aware scheduling
 
 `layerlens-cache-plan` models chained, full-block prefix keys in a bounded LRU
@@ -106,6 +122,8 @@ Every optimization should be compared with the unmodified runtime using:
 - task-level quality on a representative evaluation set;
 - peak cache occupancy, eviction, scheduler waiting, and preemption.
 
-Only exact prefix reuse is enabled by the current implementation. Approximate
-methods remain analysis targets until an adapter can measure their quality and
-runtime trade-offs directly.
+Exact prefix planning is available as an engine-facing feature. Exact Product
+Atlas analysis is available as a kernel experiment, but its reference executor
+is not installed into model inference. Approximate methods remain analysis
+targets until an adapter can measure their quality and runtime trade-offs
+directly.

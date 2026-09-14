@@ -1,0 +1,51 @@
+{
+  "schema_version": "1.0",
+  "experiment": "exact_product_atlas",
+  "model": "Qwen/Qwen3.5-0.8B",
+  "layer": 0,
+  "parameters": [
+    "model.layers.0.mlp.gate_proj.weight",
+    "model.layers.0.mlp.up_proj.weight"
+  ],
+  "analysis": {
+    "dtype": "bfloat16",
+    "matrix_shapes": [[3584, 1024], [3584, 1024]],
+    "conventional_multiplications": 7340032,
+    "atlas_multiplications": 1690196,
+    "multiplications_saved": 5649836,
+    "multiplication_savings_ratio": 0.7697290693010603,
+    "original_weight_bytes": 14680064,
+    "theoretical_packed_atlas_bytes": 13472936,
+    "theoretical_storage_ratio": 0.9177709306989398,
+    "exact_weight_values": true,
+    "quantization_added": false
+  },
+  "reference_benchmark": {
+    "device": "cpu",
+    "iterations": 20,
+    "baseline_median_ms": 0.520229,
+    "atlas_median_ms": 4.9613335,
+    "atlas_to_baseline_ratio": 9.536826090048805,
+    "max_absolute_error": 2.384185791015625e-7,
+    "mean_absolute_error": 3.7659642515563974e-8,
+    "relative_l2_error": 1.4635310820350192e-7,
+    "cosine_similarity": 1.0000003576278687,
+    "production_kernel": false
+  },
+  "temporal_coordinate_scan": {
+    "activation_vectors": 61,
+    "input_features": 1024,
+    "exact_hit_rate": 0.027567879098360657,
+    "last_16_hit_rate": 0.0489501953125,
+    "whole_vector_duplicates": false,
+    "prompt_content_recorded": false
+  },
+  "privacy": {
+    "contains_prompt": false,
+    "contains_activations": false,
+    "contains_generated_text": false,
+    "contains_hostname": false,
+    "contains_username": false,
+    "contains_secrets": false
+  }
+}

@@ -18,6 +18,16 @@ from .metrics import VLLMMetricsSampler, parse_prometheus, summarize_vllm_metric
 from .ollama import capture_ollama, normalize_ollama_metrics
 from .privacy import safe_model_identifier
 from .profiler import LayerProfiler, ProfileConfig
+from .product_atlas import (
+    CoordinateProductCache,
+    CoordinateProductCacheStats,
+    ProductAtlas,
+    ProductAtlasAnalysis,
+    ProductAtlasBenchmark,
+    analyze_weight_family,
+    benchmark_product_atlas,
+    exact_coordinate_hit_rate,
+)
 from .trace import InferenceTrace, LayerEvent, RuntimeEvent, StepEvent, TokenEvent
 
 __all__ = [
@@ -46,5 +56,13 @@ __all__ = [
     "PrefixRequest",
     "compare_prefix_schedules",
     "prefix_aware_order",
+    "ProductAtlas",
+    "CoordinateProductCache",
+    "CoordinateProductCacheStats",
+    "ProductAtlasAnalysis",
+    "ProductAtlasBenchmark",
+    "analyze_weight_family",
+    "benchmark_product_atlas",
+    "exact_coordinate_hit_rate",
 ]
-__version__ = "0.6.0"
+__version__ = "0.7.0"

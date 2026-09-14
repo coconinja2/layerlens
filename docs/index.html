@@ -146,6 +146,7 @@
     #benchmark { height: 330px; }
     #atlas-chart { height: 245px; }
     #repeatability-chart { height: 320px; }
+    #cache-benchmark-chart { height: 350px; }
     .experiment-note { margin-top: 8px; color: var(--muted); font: 400 10px/1.65 var(--mono); }
 
     .explain {
@@ -215,6 +216,7 @@
       <a href="#decisions">Decisions</a>
       <a href="#product-atlas">Product Atlas</a>
       <a href="#repeatability">Repeatability</a>
+      <a href="#result-cache">Result cache</a>
       <a href="#cache-plan">Cache plan</a>
       <a href="#integrate">Integrate</a>
       <a class="github-link" href="https://github.com/coconinja2/layerlens">View source ↗</a>
@@ -278,6 +280,24 @@
       </div>
     </section>
 
+    <section class="integrate" id="result-cache">
+      <div>
+        <div class="eyebrow">Raw experiment · memory + SQLite · bit exact</div>
+        <h2>Cache only where the math actually repeats.</h2>
+        <p class="integrate-copy">LayerLens captured native BF16 inputs and outputs from Qwen3.5, then replayed each projection with no cache, an exact memory cache, and a persistent SQLite cache. The early projection saved work; the contextual projection did not. Admission is decided per module from measured wall time.</p>
+        <div class="adapter-list"><span>7 / 37 exact hits</span><span>44.04M multiplies skipped</span><span>12.88% query-path saving</span><span>0-bit output change</span></div>
+        <div class="integration-actions">
+          <a href="https://github.com/coconinja2/layerlens/blob/main/CACHE_BENCHMARK.md">Method + integration ↗</a>
+          <a class="secondary" href="https://github.com/coconinja2/layerlens/blob/main/benchmarks/qwen35-08b-exact-result-cache.json">Raw aggregate data ↗</a>
+        </div>
+      </div>
+      <div class="code-card">
+        <div class="code-title"><span>Latency vs native dense · lower is better</span><span>MEDIAN × 7</span></div>
+        <div id="cache-benchmark-chart"></div>
+        <div class="experiment-note"><strong>Decision:</strong> admit layer-0 QKV only after exact reuse is observed; reject layer-3 MLP at 0% hits. Setup makes both first short passes slower. Reopened SQLite is page-cache warm, not cold-disk latency.</div>
+      </div>
+    </section>
+
     <section class="integrate" id="cache-plan">
       <div>
         <div class="eyebrow">Exact optimization · no output change</div>
@@ -315,7 +335,7 @@ ORDER  0 → 2 → 4 → 1 → 3 → 5</pre>
         </div>
       </div>
       <div class="code-card">
-        <div class="code-title"><span>Runtime-neutral capture</span><span>LayerLens 0.8</span></div>
+        <div class="code-title"><span>Runtime-neutral capture</span><span>LayerLens 0.9</span></div>
         <pre><span class="cyan">$</span> layerlens-capture --list-runtimes
 ollama
 vllm
@@ -562,6 +582,16 @@ my-runtime
         {...baseLayout,margin:{l:142,r:42,t:14,b:42},showlegend:false,xaxis:{...baseLayout.xaxis,title:'Observed exact reuse (%)',range:[0,105]},yaxis:{...baseLayout.yaxis,autorange:'reversed'}},plotConfig);
     }
 
+    function renderCacheBenchmark() {
+      const labels=['Layer 0 QKV · 18.92% reuse','Layer 3 MLP · 0% reuse'];
+      Plotly.newPlot('cache-benchmark-chart', [
+        {type:'bar',name:'Memory · empty',y:labels,x:[0.871,1.103],orientation:'h',marker:{color:COLORS.cyan},hovertemplate:'%{y}<br>Empty memory cache <b>%{x:.3f}× dense</b><extra></extra>'},
+        {type:'bar',name:'First pass + setup',y:labels,x:[2.025,2.576],orientation:'h',marker:{color:COLORS.danger},hovertemplate:'%{y}<br>Memory first pass + setup <b>%{x:.3f}× dense</b><extra></extra>'},
+        {type:'bar',name:'Memory · fully warm',y:labels,x:[0.041,0.083],orientation:'h',marker:{color:COLORS.green},hovertemplate:'%{y}<br>Fully warm memory <b>%{x:.3f}× dense</b><extra></extra>'},
+        {type:'bar',name:'SQLite · reopened query',y:labels,x:[0.162,0.323],orientation:'h',marker:{color:COLORS.violet},hovertemplate:'%{y}<br>Reopened SQLite query <b>%{x:.3f}× dense</b><extra></extra>'}
+      ], {...baseLayout,barmode:'group',margin:{l:174,r:14,t:34,b:56},legend:{orientation:'h',x:0,y:1.22,font:{color:COLORS.muted,size:9}},xaxis:{...baseLayout.xaxis,title:'Normalized latency (native dense = 1.0×)',range:[0,2.75]},yaxis:{...baseLayout.yaxis,autorange:'reversed'},shapes:[{type:'line',x0:1,x1:1,y0:-.5,y1:1.5,line:{color:COLORS.amber,width:1,dash:'dot'}}]},plotConfig);
+    }
+
     function renderRun(index) {
       const run = runs[index];
       document.getElementById('dashboard').innerHTML = shell(run);
@@ -577,6 +607,7 @@ my-runtime
 
     renderProductAtlas();
     renderRepeatability();
+    renderCacheBenchmark();
     fetch('./runs.json').then(response => {
       if (!response.ok) throw new Error('Trace data unavailable');
       return response.json();

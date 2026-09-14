@@ -1,0 +1,183 @@
+{
+  "cache_contract": {
+    "approximation_added": false,
+    "disk_backend": "sqlite_wal_synchronous_full",
+    "disk_path_recorded": false,
+    "input_bytes_stored": false,
+    "key": "blake2b(exact activation dtype + shape + bytes)",
+    "namespace": "sha256(exact weight and bias bytes)",
+    "value": "native-dtype projection output"
+  },
+  "experiment": "exact_result_cache_raw_benchmark",
+  "experiments": [
+    {
+      "activation_vectors": 37,
+      "activation_width": 1024,
+      "admission_decision": {
+        "empty_pass_query_path_faster": true,
+        "empty_pass_query_path_saved_percent": 12.883530695865037,
+        "first_pass_including_initialization_faster": false,
+        "recommendation": "admit_after_reuse_is_observed",
+        "setup_cost_break_even_equivalent_workloads": 8.959258541092193
+      },
+      "bitwise_output_agreement": true,
+      "cycles": 7,
+      "disk_empty_cache_median_ms": 8.339583,
+      "disk_empty_cache_vs_without": 1.5318970131657883,
+      "disk_file_bytes": 2707456,
+      "disk_initialization_median_ms": 6.694417,
+      "disk_reopen_initialization_median_ms": 6.689666,
+      "disk_reopen_page_cache_warm_median_ms": 0.880333,
+      "disk_reopen_page_cache_warm_vs_without": 0.16170826446493525,
+      "disk_stats_after_empty_pass": {
+        "hit_rate": 0.1891891891891892,
+        "hits": 7,
+        "lookups": 37,
+        "misses": 30,
+        "output_bytes_stored": 368640
+      },
+      "disk_stats_after_reopen": {
+        "hit_rate": 1.0,
+        "hits": 37,
+        "lookups": 37,
+        "misses": 0,
+        "output_bytes_stored": 0
+      },
+      "label": "model.layers.0.linear_attn.in_proj_qkv",
+      "mathematical_work": {
+        "dense_matvecs_avoided_on_empty_pass": 7,
+        "dense_matvecs_avoided_on_fully_warm_pass": 37,
+        "dense_matvecs_with_empty_memory_cache": 30,
+        "dense_matvecs_without_cache": 37,
+        "scalar_multiplications_avoided_on_empty_pass": 44040192,
+        "scalar_multiplications_avoided_on_fully_warm_pass": 232783872,
+        "scalar_multiplications_per_matvec": 6291456
+      },
+      "memory_empty_cache_median_ms": 4.742584,
+      "memory_empty_cache_vs_without": 0.8711646930413496,
+      "memory_first_pass_including_initialization_median_ms": 11.026375,
+      "memory_first_pass_including_initialization_vs_without": 2.0254335173048723,
+      "memory_initialization_median_ms": 6.283791,
+      "memory_stats_after_empty_pass": {
+        "hit_rate": 0.1891891891891892,
+        "hits": 7,
+        "lookups": 37,
+        "misses": 30,
+        "output_bytes_stored": 368640
+      },
+      "memory_stats_after_warm_pass": {
+        "hit_rate": 0.5945945945945946,
+        "hits": 44,
+        "lookups": 74,
+        "misses": 30,
+        "output_bytes_stored": 368640
+      },
+      "memory_warm_cache_median_ms": 0.224041,
+      "memory_warm_cache_vs_without": 0.04115406474480515,
+      "native_model_projection_bitwise_agreement": true,
+      "weight_dtype": "bfloat16",
+      "weight_shape": [
+        6144,
+        1024
+      ],
+      "without_cache_median_ms": 5.443958
+    },
+    {
+      "activation_vectors": 37,
+      "activation_width": 1024,
+      "admission_decision": {
+        "empty_pass_query_path_faster": false,
+        "empty_pass_query_path_saved_percent": -10.313990608201898,
+        "first_pass_including_initialization_faster": false,
+        "recommendation": "reject_exact_full_result_cache",
+        "setup_cost_break_even_equivalent_workloads": null
+      },
+      "bitwise_output_agreement": true,
+      "cycles": 7,
+      "disk_empty_cache_median_ms": 8.326667,
+      "disk_empty_cache_vs_without": 3.6268609258600257,
+      "disk_file_bytes": 4976640,
+      "disk_initialization_median_ms": 3.577125,
+      "disk_reopen_initialization_median_ms": 3.506834,
+      "disk_reopen_page_cache_warm_median_ms": 0.7415,
+      "disk_reopen_page_cache_warm_vs_without": 0.32297645342670833,
+      "disk_stats_after_empty_pass": {
+        "hit_rate": 0.0,
+        "hits": 0,
+        "lookups": 37,
+        "misses": 37,
+        "output_bytes_stored": 265216
+      },
+      "disk_stats_after_reopen": {
+        "hit_rate": 1.0,
+        "hits": 37,
+        "lookups": 37,
+        "misses": 0,
+        "output_bytes_stored": 0
+      },
+      "label": "model.layers.3.mlp.gate_proj",
+      "mathematical_work": {
+        "dense_matvecs_avoided_on_empty_pass": 0,
+        "dense_matvecs_avoided_on_fully_warm_pass": 37,
+        "dense_matvecs_with_empty_memory_cache": 37,
+        "dense_matvecs_without_cache": 37,
+        "scalar_multiplications_avoided_on_empty_pass": 0,
+        "scalar_multiplications_avoided_on_fully_warm_pass": 135790592,
+        "scalar_multiplications_per_matvec": 3670016
+      },
+      "memory_empty_cache_median_ms": 2.532625,
+      "memory_empty_cache_vs_without": 1.103139906082019,
+      "memory_first_pass_including_initialization_median_ms": 5.914667,
+      "memory_first_pass_including_initialization_vs_without": 2.576261862252176,
+      "memory_initialization_median_ms": 3.382042,
+      "memory_stats_after_empty_pass": {
+        "hit_rate": 0.0,
+        "hits": 0,
+        "lookups": 37,
+        "misses": 37,
+        "output_bytes_stored": 265216
+      },
+      "memory_stats_after_warm_pass": {
+        "hit_rate": 0.5,
+        "hits": 37,
+        "lookups": 74,
+        "misses": 37,
+        "output_bytes_stored": 265216
+      },
+      "memory_warm_cache_median_ms": 0.190542,
+      "memory_warm_cache_vs_without": 0.08299471259451362,
+      "native_model_projection_bitwise_agreement": true,
+      "weight_dtype": "bfloat16",
+      "weight_shape": [
+        3584,
+        1024
+      ],
+      "without_cache_median_ms": 2.295833
+    }
+  ],
+  "model": "Qwen/Qwen3.5-0.8B",
+  "model_revision": null,
+  "privacy": {
+    "aggregate_statistics_only": true,
+    "contains_activations": false,
+    "contains_cache_path": false,
+    "contains_cached_outputs": false,
+    "contains_hostname": false,
+    "contains_prompt": false,
+    "contains_token_ids": false,
+    "contains_username": false
+  },
+  "runtime": {
+    "device": "cpu",
+    "dtype": "bfloat16",
+    "torch": "2.14.0",
+    "transformers": "5.16.1"
+  },
+  "schema_version": "1.0",
+  "workload": {
+    "cycles": 7,
+    "generated_tokens": 24,
+    "max_vectors_per_target": 64,
+    "prompt_tokens": 14
+  }
+}

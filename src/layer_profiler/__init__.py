@@ -15,6 +15,13 @@ from .cache_plan import (
     prefix_aware_order,
 )
 from .metrics import VLLMMetricsSampler, parse_prometheus, summarize_vllm_metrics
+from .exact_result_cache import (
+    ExactCacheStats,
+    MemoryExactResultCache,
+    SQLiteExactResultCache,
+    benchmark_exact_result_caches,
+    weight_fingerprint,
+)
 from .ollama import capture_ollama, normalize_ollama_metrics
 from .privacy import safe_model_identifier
 from .profiler import LayerProfiler, ProfileConfig
@@ -78,5 +85,10 @@ __all__ = [
     "UnaryAtlasProfile",
     "profile_attention_heads",
     "profile_tensor_repetition",
+    "ExactCacheStats",
+    "MemoryExactResultCache",
+    "SQLiteExactResultCache",
+    "benchmark_exact_result_caches",
+    "weight_fingerprint",
 ]
-__version__ = "0.8.0"
+__version__ = "0.9.0"

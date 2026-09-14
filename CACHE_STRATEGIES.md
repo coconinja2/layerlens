@@ -35,6 +35,26 @@ different model or backend can be compared rather than assumed equivalent.
 
 See [REPEATABILITY.md](REPEATABILITY.md) for the hierarchy and interpretation.
 
+## Implemented experiment: exact full-projection results
+
+`layerlens-cache-benchmark` captures real inputs to chosen linear modules and
+compares native dense execution with empty and warm memory caches plus a
+reopened SQLite cache. A key includes the exact activation dtype, shape, and
+bytes under an exact weight-and-bias fingerprint. A hit therefore reuses the
+whole native-dtype projection output with no approximation.
+
+On the saved Qwen3.5 0.8B CPU run, the layer-0 linear-attention QKV input had
+18.92% exact full-vector reuse. It avoided 7 of 37 matvecs, or 44,040,192 scalar
+multiplications, and made the query path 12.88% faster. Initialization made the
+first short pass slower, so the reported admission decision waits until reuse is
+observed. The layer-3 MLP gate input had 0% reuse and 10.31% overhead and was
+rejected. This is the key boundary: repeated scalar values do not imply a
+reusable dependency-complete matrix result.
+
+See [CACHE_BENCHMARK.md](CACHE_BENCHMARK.md) for formulas, raw commands,
+measured timings, integration code, and the warning not to publish the SQLite
+file containing derived hidden-state outputs.
+
 ## Implemented: exact prefix-aware scheduling
 
 `layerlens-cache-plan` models chained, full-block prefix keys in a bounded LRU

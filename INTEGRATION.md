@@ -161,6 +161,38 @@ For dependency injection inside a larger application, create a private
 `registry.capture(name, request)`. This avoids global state and is convenient
 for tests.
 
+### Embed the exact projection-result cache
+
+First profile a candidate module with `layerlens-cache-benchmark`. Then wrap
+only modules whose measured exact hits save more time than hashing and lookup:
+
+```python
+from pathlib import Path
+from layer_profiler import MemoryExactResultCache, SQLiteExactResultCache
+
+memory_cache = MemoryExactResultCache(linear.weight, linear.bias)
+output = memory_cache(input_vector)
+
+with SQLiteExactResultCache(
+    linear.weight,
+    Path("projection-results.sqlite"),
+    bias=linear.bias,
+    experiment_namespace="model-revision-and-adapter",
+) as disk_cache:
+    output = disk_cache(input_vector)
+```
+
+Inputs must be individual vectors of the module's input width. Keys include the
+exact input dtype, shape, and bytes plus an exact weight-and-bias fingerprint;
+outputs retain the projection's native dtype. A hit therefore replaces one
+complete matrix-vector product without approximation. CPU measurements are not
+portable to GPU engines, and the reference wrapper is not a fused GPU kernel.
+
+The database is created with owner-only permissions, but it still contains
+derived hidden-state outputs. Keep it local, assign a model-specific namespace,
+and do not commit it. See [CACHE_BENCHMARK.md](CACHE_BENCHMARK.md) for the raw
+with/without-cache methodology and admission result.
+
 ## 4. Add another runtime
 
 An adapter needs a lowercase `name` and a `capture()` method:

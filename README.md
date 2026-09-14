@@ -156,6 +156,31 @@ but not enabled. See [the bottom-up formulas and decisions](REPEATABILITY.md).
 
 ![LayerLens bottom-up exact repeatability profile](docs/layerlens-repeatability.png)
 
+## Benchmark exact matrix-result caching
+
+`layerlens-cache-benchmark` captures real inputs to selected model projections,
+then times the native operation without a cache, an empty and fully warm
+in-memory cache, and an SQLite cache after a close/reopen cycle:
+
+```bash
+poetry run layerlens-cache-benchmark \
+  --model Qwen/Qwen3.5-0.8B \
+  --max-new-tokens 24 \
+  --cycles 7 \
+  --disk-cache /tmp/layerlens-exact-result-cache.sqlite \
+  --output benchmarks/qwen35-08b-exact-result-cache.json
+```
+
+The cache key includes the exact activation bits and a fingerprint of the exact
+weight and bias bits. On the saved BF16 CPU run, an early QKV projection had
+18.92% full-vector reuse, skipped 44.04M scalar multiplications, and improved
+the query path by 12.88%; setup still made its first short pass slower. A layer-3
+MLP projection had 0% reuse and added 10.31% overhead, so it was rejected. All
+replayed and cached outputs matched the model-captured projection output bit for
+bit. See [the raw methodology, results, integration API, and storage warning](CACHE_BENCHMARK.md).
+
+![LayerLens exact result-cache benchmark](docs/layerlens-cache-benchmark.png)
+
 ## Reduce repeated prefill computation
 
 `layerlens-cache-plan` simulates a bounded, full-block LRU prefix cache and

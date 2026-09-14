@@ -18,5 +18,6 @@ jobs:
       - run: poetry run layerlens-capture --list-runtimes
       - run: poetry run layerlens-capture --describe-runtime vllm
       - run: poetry run layerlens-cache-plan examples/cache-workload.json --block-size 4 --capacity-blocks 4 --layers 24 --hidden-size 1024 --intermediate-size 3584
+      - run: poetry run layerlens-repeatability --help
       - run: poetry run python scripts/build_showcase.py --help
       - run: poetry run python scripts/privacy_audit.py

@@ -4,6 +4,9 @@ Product Atlas is a LayerLens experiment for preserving scalar products inside
 dense inference matrix multiplications. It is not a KV cache, prompt cache, or
 new quantization format.
 
+For scalar, sigmoid/SiLU, activation-tile, attention-head, block, and layer
+measurements around this experiment, see [REPEATABILITY.md](REPEATABILITY.md).
+
 ## The idea
 
 Several projections in a transformer consume the same activation vector. In a
@@ -118,4 +121,3 @@ materializing the gather tensor. It must beat the vendor GEMV/GEMM kernel in
 wall time and memory on several layers before LayerLens should attempt a 27B
 integration. If it fails that gate, the experiment should remain a profiler
 finding rather than become an inference feature.
-

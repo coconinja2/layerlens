@@ -132,6 +132,30 @@ contract, and Qwen3.5 27B feasibility check](PRODUCT_ATLAS.md).
 
 ![LayerLens Exact Product Atlas multiplication benchmark](docs/layerlens-product-atlas.png)
 
+## Find repeatable calculations from scalars to heads
+
+`layerlens-repeatability` captures aggregate bit-pattern statistics at several
+levels without retaining prompts or hidden tensors:
+
+```bash
+poetry run layerlens-repeatability \
+  --model Qwen/Qwen3.5-0.8B \
+  --layers 0,3 \
+  --max-new-tokens 24 \
+  --output benchmarks/repeatability-profile.json
+```
+
+The profiler checks complete BF16 sigmoid/SiLU lookup tables, same-coordinate
+values, exact activation tiles and vectors, unchanged deltas, MLP and QKV
+product sharing, attention-head vectors, block boundaries, and the selected
+layer stack. The first saved Qwen run found large scalar/unary repetition and
+68.86–76.97% reusable scalar multiplications inside sibling projections, but
+0% contextual tile, vector, and attention-head reuse. The exact unary table was
+also 2.35–2.45× slower than PyTorch's native CPU operation, so it is measured
+but not enabled. See [the bottom-up formulas and decisions](REPEATABILITY.md).
+
+![LayerLens bottom-up exact repeatability profile](docs/layerlens-repeatability.png)
+
 ## Reduce repeated prefill computation
 
 `layerlens-cache-plan` simulates a bounded, full-block LRU prefix cache and

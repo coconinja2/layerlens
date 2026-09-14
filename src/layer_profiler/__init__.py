@@ -28,6 +28,14 @@ from .product_atlas import (
     benchmark_product_atlas,
     exact_coordinate_hit_rate,
 )
+from .repeatability import (
+    AttentionHeadProfile,
+    FiniteDomainUnaryAtlas,
+    TensorRepeatProfile,
+    UnaryAtlasProfile,
+    profile_attention_heads,
+    profile_tensor_repetition,
+)
 from .trace import InferenceTrace, LayerEvent, RuntimeEvent, StepEvent, TokenEvent
 
 __all__ = [
@@ -64,5 +72,11 @@ __all__ = [
     "analyze_weight_family",
     "benchmark_product_atlas",
     "exact_coordinate_hit_rate",
+    "AttentionHeadProfile",
+    "FiniteDomainUnaryAtlas",
+    "TensorRepeatProfile",
+    "UnaryAtlasProfile",
+    "profile_attention_heads",
+    "profile_tensor_repetition",
 ]
-__version__ = "0.7.0"
+__version__ = "0.8.0"

@@ -20,6 +20,21 @@ kernel wins on wall time, memory, numerical agreement, and task quality.
 
 See [PRODUCT_ATLAS.md](PRODUCT_ATLAS.md) for the equations and reproducible CLI.
 
+## Implemented measurement: bottom-up repeatability
+
+`layerlens-repeatability` profiles exact recurrence at scalar, unary-function,
+coordinate, tile, vector, sibling-projection, attention-head, block, and layer
+boundaries. The report distinguishes “the same BF16 number occurred again” from
+“the same dependency-complete calculation can be reused.”
+
+The first Qwen3.5 0.8B run found 97.81–98.33% repeated unary inputs, but a
+complete bit-exact sigmoid/SiLU table was 2.35–2.45× slower than the native CPU
+operation. Contextual four-value tiles, full vectors, and query-head vectors had
+0% exact reuse. These rejected paths remain in the saved aggregate report so a
+different model or backend can be compared rather than assumed equivalent.
+
+See [REPEATABILITY.md](REPEATABILITY.md) for the hierarchy and interpretation.
+
 ## Implemented: exact prefix-aware scheduling
 
 `layerlens-cache-plan` models chained, full-block prefix keys in a bounded LRU

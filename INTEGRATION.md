@@ -76,6 +76,67 @@ server; then provide control and event paths visible to the LayerLens process.
 --option layer_events=true --option metrics_sample_ms=25
 ```
 
+### Cache-aware workload planning
+
+For a queue of already-tokenized prompts, LayerLens can compare FCFS execution
+with an exact longest-prefix-first order under a bounded block budget:
+
+```bash
+layerlens-cache-plan workload.json \
+  --block-size 16 \
+  --capacity-blocks 4096 \
+  --layers 32 \
+  --hidden-size 4096 \
+  --intermediate-size 11008 \
+  --mlp-projections 3 \
+  --cache-namespace model-revision-and-adapter
+```
+
+The workload format deliberately excludes prompt text:
+
+```json
+{
+  "requests": [
+    {"request_ref": "request-0", "token_ids": [1, 2, 3, 4]},
+    {"request_ref": "request-1", "token_ids": [1, 2, 3, 9]}
+  ]
+}
+```
+
+Only complete blocks are counted as reusable. A block key is a chained SHA-256
+digest over its model namespace, parent block, and token IDs. Reports expose
+only aggregate hits and trace-local references. Execute the returned
+`prefix_aware.order` against a runtime with compatible prefix caching enabled;
+the planner itself does not hold model tensors or replace the engine cache.
+
+When model dimensions are supplied, the report adds a deliberately bounded
+dense-decoder estimate:
+
+```text
+fixed FLOPs per layer-token = 8*d^2 + 2*P*d*m
+```
+
+Here `P=2` for a two-projection MLP and `P=3` for a gated MLP. The estimate
+counts Q/K/V/output and MLP matrix multiplications only; consult the report's
+`cost_model.excludes` list before comparing hybrid, MoE, or custom architectures.
+
+The same planner is available as a library:
+
+```python
+from layer_profiler import PrefixRequest, compare_prefix_schedules
+
+report = compare_prefix_schedules(
+    [
+        PrefixRequest("request-0", (1, 2, 3, 4)),
+        PrefixRequest("request-1", (1, 2, 3, 9)),
+    ],
+    block_size=2,
+    capacity_blocks=64,
+    num_layers=32,
+    cache_namespace="model-revision-and-adapter",
+)
+```
+
 ## 3. Embed LayerLens in Python
 
 ```python

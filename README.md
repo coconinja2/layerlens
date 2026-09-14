@@ -35,9 +35,17 @@ LayerLens ships with `ollama` and `vllm` adapters. A third-party package can
 add another runtime through the `layerlens.adapters` Python entry-point group;
 the generic CLI discovers it without a LayerLens source-code change.
 
+It also includes an exact prefix-cache planner. The planner reorders a queued
+workload so requests with reusable prefixes stay close together while their KV
+blocks are still resident. It never changes tokens or model output.
+
 **[Read the complete integration guide →](INTEGRATION.md)** for vLLM,
 Ollama, Python embedding, adapter packaging, supported options, privacy rules,
 and a complete custom HTTP adapter template.
+
+**[Review the cache strategy notes →](CACHE_STRATEGIES.md)** for exact prefix
+reuse, modular and non-prefix KV caching, multi-tier storage, attention
+compression, and layer-skipping research with explicit correctness boundaries.
 
 ![LayerLens pluggable runtime adapter workflow](docs/layerlens-pluggable.png)
 
@@ -99,6 +107,39 @@ Model selection is runtime-driven rather than hard-coded. Hugging Face layer
 paths are discovered with a configurable regex, vLLM class matching is
 configurable through `LLM_LAYER_CLASS_PATTERN`, and Ollama accepts any locally
 installed or cloud-accessible model name.
+
+## Reduce repeated prefill computation
+
+`layerlens-cache-plan` simulates a bounded, full-block LRU prefix cache and
+compares first-come-first-served execution with a longest-prefix-first schedule.
+The input contains token IDs and trace-local request references, never prompt
+text:
+
+```bash
+poetry run layerlens-cache-plan examples/cache-workload.json \
+  --block-size 4 \
+  --capacity-blocks 4 \
+  --layers 24 \
+  --hidden-size 1024 \
+  --intermediate-size 3584 \
+  --mlp-projections 3
+```
+
+For the included six-request workload, alternating two prefix families causes
+every request to miss under the four-block budget. Cache-aware ordering groups
+each family, raises the reusable-token rate from 0% to 50%, and avoids 1,152 of
+2,304 layer-token evaluations. This is an exact scheduling optimization: the
+serving engine must have compatible prefix caching enabled, but no approximation
+or model modification is involved.
+
+For a conventional dense decoder with those dimensions, the optional cost model
+also estimates 35.03 GFLOPs of fixed attention-projection and gated-MLP matrix
+multiplication avoided. It clearly excludes attention-score products,
+normalization, elementwise work, MoE routing, and nonstandard attention shapes.
+
+Use a model/revision-specific `--cache-namespace` in integrations so blocks from
+different weights, adapters, or tokenizers can never match. The namespace and
+token IDs are hashed internally and are not written to the report.
 
 The public extension API consists of `CaptureRequest`, `RuntimeAdapter`,
 `AdapterRegistry`, `adapter_registry`, and `capture`. Existing specialized
@@ -301,6 +342,8 @@ fabricating data; the original layer-event format remains compatible.
   unless `--include-content` is passed.
 - Server and metrics endpoint URLs are used for the request but never serialized.
 - Raw Prometheus labels are discarded; cache configuration uses a strict allowlist.
+- Cache-planning reports contain trace-local request references and aggregate
+  hit/operation counts, not token IDs, block hashes, or prompt content.
 - Environment metadata records only OS family and machine architecture—not a
   hostname, username, home directory, or local path.
 - Absolute local model paths are serialized as `local-model`; registry model IDs

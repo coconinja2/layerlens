@@ -210,6 +210,7 @@
     <div class="nav-links">
       <a href="#explorer">Explorer</a>
       <a href="#decisions">Decisions</a>
+      <a href="#cache-plan">Cache plan</a>
       <a href="#integrate">Integrate</a>
       <a class="github-link" href="https://github.com/coconinja2/layerlens">View source ↗</a>
     </div>
@@ -236,6 +237,31 @@
       <div class="dashboard" id="dashboard"><div class="loading">Loading instrumented layer events…</div></div>
     </section>
 
+    <section class="integrate" id="cache-plan">
+      <div>
+        <div class="eyebrow">Exact optimization · no output change</div>
+        <h2>Schedule shared prefixes while their KV blocks are still warm.</h2>
+        <p class="integrate-copy">LayerLens now simulates a bounded full-block LRU cache, then groups queued requests by the longest reusable prefix. It reports the layer-token evaluations an engine can skip without storing prompt text.</p>
+        <div class="adapter-list"><span>0% → 50% prefix hits</span><span>1,152 layer-token ops avoided</span><span>≈35.03 fixed-matmul GFLOPs</span><span>Output preserving</span></div>
+        <div class="integration-actions">
+          <a href="https://github.com/coconinja2/layerlens/blob/main/examples/cache-workload.json">Example workload ↗</a>
+          <a class="secondary" href="https://github.com/coconinja2/layerlens#reduce-repeated-prefill-computation">How it works ↗</a>
+        </div>
+      </div>
+      <div class="code-card">
+        <div class="code-title"><span>Prefix-aware plan</span><span>6 REQUESTS · 4 BLOCKS</span></div>
+        <pre><span class="cyan">$</span> layerlens-cache-plan workload.json \
+  --block-size 4 \
+  --capacity-blocks 4 \
+  --layers 24
+
+FCFS       0 / 2304 layer-token ops avoided
+PREFIX  1152 / 2304 layer-token ops avoided
+
+ORDER  0 → 2 → 4 → 1 → 3 → 5</pre>
+      </div>
+    </section>
+
     <section class="integrate" id="integrate">
       <div>
         <div class="eyebrow">One trace contract · any runtime</div>
@@ -248,7 +274,7 @@
         </div>
       </div>
       <div class="code-card">
-        <div class="code-title"><span>Runtime-neutral capture</span><span>LayerLens 0.5</span></div>
+        <div class="code-title"><span>Runtime-neutral capture</span><span>LayerLens 0.6</span></div>
         <pre><span class="cyan">$</span> layerlens-capture --list-runtimes
 ollama
 vllm

@@ -8,6 +8,12 @@ from .adapters import (
     capture,
 )
 from .analysis import aggregate_event_grid, choose_group_size, diagnose_trace
+from .cache_plan import (
+    PrefixCacheSimulator,
+    PrefixRequest,
+    compare_prefix_schedules,
+    prefix_aware_order,
+)
 from .metrics import VLLMMetricsSampler, parse_prometheus, summarize_vllm_metrics
 from .ollama import capture_ollama, normalize_ollama_metrics
 from .privacy import safe_model_identifier
@@ -36,5 +42,9 @@ __all__ = [
     "aggregate_event_grid",
     "choose_group_size",
     "diagnose_trace",
+    "PrefixCacheSimulator",
+    "PrefixRequest",
+    "compare_prefix_schedules",
+    "prefix_aware_order",
 ]
-__version__ = "0.5.0"
+__version__ = "0.6.0"

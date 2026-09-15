@@ -24,6 +24,14 @@ from .exact_result_cache import (
 )
 from .ollama import capture_ollama, normalize_ollama_metrics
 from .privacy import safe_model_identifier
+from .precomputed_multiply import (
+    BF16Parts,
+    benchmark_precomputed_products,
+    benchmark_precomputed_projection,
+    decode_bf16,
+    full_mantissa_table,
+    nibble_product_table,
+)
 from .profiler import LayerProfiler, ProfileConfig
 from .product_atlas import (
     CoordinateProductCache,
@@ -90,5 +98,11 @@ __all__ = [
     "SQLiteExactResultCache",
     "benchmark_exact_result_caches",
     "weight_fingerprint",
+    "BF16Parts",
+    "benchmark_precomputed_products",
+    "benchmark_precomputed_projection",
+    "decode_bf16",
+    "full_mantissa_table",
+    "nibble_product_table",
 ]
-__version__ = "0.9.0"
+__version__ = "0.10.0"

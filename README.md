@@ -181,6 +181,29 @@ bit. See [the raw methodology, results, integration API, and storage warning](CA
 
 ![LayerLens exact result-cache benchmark](docs/layerlens-cache-benchmark.png)
 
+## Precompute BF16 arithmetic instead of caching inputs
+
+`layerlens-precomputed-multiply` tests fixed, direct-address arithmetic tables
+on real model values. It does not hash or cache prompts, activations, or prior
+results:
+
+```bash
+poetry run layerlens-precomputed-multiply \
+  --model Qwen/Qwen3.5-0.8B \
+  --max-pairs 1000000 \
+  --output-rows 6144 \
+  --iterations 7
+```
+
+The 128 KiB table reproduced one million FP32 products bit for bit. With four
+threads, direct lookup alone took 0.236 ms versus 0.628 ms for native products,
+but rebuilding the complete floating-point values took 4.204 ms. The full QKV
+projection remained BF16-identical but was 162.76× slower than native because
+lookup, reconstruction, intermediate tensors, and accumulation were not fused.
+See [the raw method, measurements, and next kernel boundary](PRECOMPUTED_MULTIPLY.md).
+
+![LayerLens precomputed BF16 arithmetic experiment](docs/layerlens-precomputed-multiply.png)
+
 ## Reduce repeated prefill computation
 
 `layerlens-cache-plan` simulates a bounded, full-block LRU prefix cache and

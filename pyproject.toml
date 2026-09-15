@@ -1,6 +1,6 @@
 [project]
 name = "layerlens"
-version = "0.9.0"
+version = "0.10.0"
 description = "Visual, layer-by-layer observability for autoregressive LLM inference"
 authors = [
     { name = "coconinja2" },
@@ -21,6 +21,7 @@ layerlens-cache-plan = "layer_profiler.cache_cli:main"
 layerlens-product-atlas = "layer_profiler.product_atlas_cli:main"
 layerlens-repeatability = "layer_profiler.repeatability_cli:main"
 layerlens-cache-benchmark = "layer_profiler.cache_benchmark_cli:main"
+layerlens-precomputed-multiply = "layer_profiler.precomputed_multiply_cli:main"
 llm-layer-profile = "layer_profiler.cli:main"
 llm-layer-profile-vllm = "layer_profiler.vllm_cli:main"
 

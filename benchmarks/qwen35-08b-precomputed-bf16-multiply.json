@@ -1,0 +1,119 @@
+{
+  "experiment": "precomputed_bf16_multiplication",
+  "method": {
+    "dynamic_result_cache": false,
+    "exponent_operation": "integer addition",
+    "hash_lookup": false,
+    "mantissa_table_entries": 65536,
+    "nibble_table_entries": 256,
+    "operand_components_predecoded_before_timing": true,
+    "sign_operation": "xor",
+    "special_values": "excluded from timed sample; native fallback required",
+    "table_addressing": "direct packed integer index"
+  },
+  "model": "Qwen/Qwen3.5-0.8B",
+  "model_revision": null,
+  "privacy": {
+    "aggregate_statistics_only": true,
+    "contains_activations": false,
+    "contains_hostname": false,
+    "contains_products": false,
+    "contains_prompt": false,
+    "contains_token_ids": false,
+    "contains_username": false,
+    "contains_weights": false
+  },
+  "projection_benchmark": {
+    "iterations": 7,
+    "mantissa_table_bytes": 131072,
+    "runs": [
+      {
+        "fp32_projection_bitwise_equal": false,
+        "mantissa_table_projection_median_ms": 57.441041,
+        "mantissa_table_vs_native_bf16": 177.4015985620354,
+        "maximum_absolute_difference": 9.5367431640625e-07,
+        "mean_absolute_difference": 4.987305146642029e-08,
+        "native_bf16_projection_bitwise_equal": true,
+        "native_bf16_projection_median_ms": 0.323791,
+        "native_fp32_projection_median_ms": 2.897542,
+        "threads": 1
+      },
+      {
+        "fp32_projection_bitwise_equal": false,
+        "mantissa_table_projection_median_ms": 26.327125,
+        "mantissa_table_vs_native_bf16": 162.76429675425038,
+        "maximum_absolute_difference": 9.5367431640625e-07,
+        "mean_absolute_difference": 4.987305146642029e-08,
+        "native_bf16_projection_bitwise_equal": true,
+        "native_bf16_projection_median_ms": 0.16175,
+        "native_fp32_projection_median_ms": 1.75075,
+        "threads": 4
+      }
+    ],
+    "scalar_products": 6291456,
+    "weight_shape": [
+      6144,
+      1024
+    ]
+  },
+  "runtime": {
+    "device": "cpu",
+    "dtype": "bfloat16",
+    "torch": "2.14.0",
+    "transformers": "5.16.1"
+  },
+  "scalar_product_benchmark": {
+    "iterations": 7,
+    "mantissa_table_bytes": 131072,
+    "nibble_table_bytes": 256,
+    "pairs": 1000000,
+    "runs": [
+      {
+        "mantissa_direct_lookup_only_median_ms": 0.811167,
+        "mantissa_direct_lookup_only_vs_native": 0.7241217702426691,
+        "mantissa_products_bitwise_equal": true,
+        "mantissa_table_median_ms": 9.193375,
+        "mantissa_table_vs_native": 8.206846407095824,
+        "native_median_ms": 1.120208,
+        "nibble_products_bitwise_equal": true,
+        "nibble_table_median_ms": 20.28825,
+        "nibble_table_vs_native": 18.111145430134403,
+        "threads": 1
+      },
+      {
+        "mantissa_direct_lookup_only_median_ms": 0.236208,
+        "mantissa_direct_lookup_only_vs_native": 0.3760525373134328,
+        "mantissa_products_bitwise_equal": true,
+        "mantissa_table_median_ms": 4.204083,
+        "mantissa_table_vs_native": 6.6930674626865665,
+        "native_median_ms": 0.628125,
+        "nibble_products_bitwise_equal": true,
+        "nibble_table_median_ms": 9.397875,
+        "nibble_table_vs_native": 14.96179104477612,
+        "threads": 4
+      }
+    ],
+    "special_operand_pairs": 0
+  },
+  "schema_version": "1.0",
+  "weight_classes": {
+    "algebraic_fast_path_rate": 0.008084932963053385,
+    "exact_one_magnitude_values": 0,
+    "exact_power_of_two_magnitude_values": 50866,
+    "exact_zero_values": 0,
+    "model_specific_all_activation_products_fp32_bytes": 1261174784,
+    "total_values": 6291456,
+    "unique_bit_patterns": 4811
+  },
+  "workload": {
+    "captured_vectors": 16,
+    "different_captured_vectors": 15,
+    "generated_tokens": 12,
+    "module": "model.layers.0.linear_attn.in_proj_qkv",
+    "prompt_tokens": 14,
+    "thread_counts": [
+      1,
+      4
+    ]
+  }
+}
